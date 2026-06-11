@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "e2e": "pnpm build && tsx scripts/e2e/run-memorize-e2e.ts",
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
     "check": "pnpm typecheck && pnpm lint && pnpm test"
   },
   "devDependencies": {
