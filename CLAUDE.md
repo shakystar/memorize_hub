@@ -27,6 +27,13 @@ per-project event logs over HTTP. The sibling `memorize` repo holds the client.
 
 ## Status
 
-Scaffolded 2026-06-08 (docs only). Server implementation is the next task.
+v1 implemented 2026-06-12: `node:http` server (`src/server.ts`), ndjson-on-disk
+store (`src/store.ts`), env config (`src/config.ts`), vitest unit + HTTP
+contract tests. `pnpm check` = typecheck + lint + test.
 Reference behavior + tests live in `../memorize/tests/harness/relay-stub.ts` and
 `../memorize/tests/golden/sync-roundtrip-http-golden.test.ts`.
+
+**Scope note (2026-06-12):** this repo is the Hub's *transport layer* only. The
+#92 read surface (remote MCP endpoint, dashboards) will be a separate headless
+memorize replica that consumes this relay — do not grow projection/query/MCP
+features here.
