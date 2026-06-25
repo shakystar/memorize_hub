@@ -47,6 +47,17 @@ Distilled from the post-v1 design conversation (cross-repo position lives in
 this repo's discussions; follow-up to memorize#92 "write at the edge, read
 everywhere"). Binding on future work here:
 
+> **Update (2026-06-26) — Hub umbrella monorepo.** The repo is now a pnpm
+> monorepo: `packages/relay` (this transport layer, kept byte-for-byte and
+> isolated) + `packages/gateway` (a new control-plane). The bullets below still
+> bind, with one clarification: "not in the relay" means **not in the relay
+> *package***, not "not in this repo." The gateway is the home for the auth
+> ladder's later rungs (project-scoped API keys — built), OAuth/identity, the
+> beta access-request page (built), TLS-terminating public edge, and the
+> users/tokens/ACL DB (built, better-sqlite3, no event data). It calls the relay
+> as a separate process over HTTP with the internal token — never importing
+> `EventStore`. The relay package stays zero-dep, opaque, and transport-only.
+
 - **Transport layer only.** This repo is the Hub's *transport layer*. The #92
   read surface (remote MCP endpoint, dashboards, multi-user identity) will be
   a separate **headless memorize replica that consumes this relay** — never
@@ -108,9 +119,20 @@ fine.
 
 - **v1** — `node:http` server, ndjson-on-disk store-and-forward, optional bearer
   token, `POST/GET /v1/projects/:id/events` + `/healthz`. Implements PROTOCOL.md.
-- **Later** — retention/compaction policy, per-project token scoping, TLS/deploy
-  guide, and a **realtime push channel** (SSE/websocket) for memorize P3-c
-  (cross-machine live watermark deltas, not just poll-on-boundary).
+- **gateway v0** (2026-06-26, `packages/gateway`) — control-plane: control-plane
+  DB (users/tokens/ACL), **project-scoped API keys** (per-project token scoping,
+  done in the gateway not the relay), ACL reverse proxy that injects the relay's
+  internal token, public **beta access-request page** + `hub-gateway-admin`
+  manual-approval CLI, and a two-replica async-convergence e2e through the gateway.
+- **M4** — operator **OAuth login + dashboard** in the gateway (browser approval
+  UI over the same access-requests). Open decision: OAuth provider.
+- **M5** — **public deploy**: gateway (public, TLS-terminated) + relay
+  (internal-only) Docker/compose, public domain, onboard the first beta
+  participant, measure real cross-device async convergence. Open decision:
+  deploy target.
+- **Later** — retention/compaction policy, and a **realtime push channel**
+  (SSE/websocket) for memorize P3-c (cross-machine live watermark deltas, not
+  just poll-on-boundary).
 
 ## Verifying against the contract
 

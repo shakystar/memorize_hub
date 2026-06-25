@@ -26,9 +26,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
 const HUB_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+// HUB_ROOT is the relay package dir (packages/relay); the sibling memorize repo
+// lives three levels up at <monorepo>/../memorize.
 const MEMORIZE_CLI =
   process.env.MEMORIZE_CLI ??
-  resolve(HUB_ROOT, '..', 'memorize', 'dist', 'cli', 'index.js');
+  resolve(HUB_ROOT, '..', '..', '..', 'memorize', 'dist', 'cli', 'index.js');
 const TOKEN = 'e2e-secret';
 
 let failures = 0;

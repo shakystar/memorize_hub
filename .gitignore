@@ -3,3 +3,10 @@ dist/
 data/
 coverage/
 *.tsbuildinfo
+
+# gateway control-plane sqlite (runtime state)
+gateway.db
+gateway.db-*
+
+# local tool / agent data — never tracked
+.memorize/
