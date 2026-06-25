@@ -4,6 +4,7 @@ import type Database from 'better-sqlite3';
 
 import { handleBetaPage, handleBetaSubmit } from './beta.js';
 import type { GatewayConfig } from './config.js';
+import { handleAdmin } from './dashboard.js';
 import { handleEventsProxy, sendJson, type ProxyContext } from './proxy.js';
 
 const EVENTS_ROUTE = /^\/v1\/projects\/([^/]+)\/events$/;
@@ -38,6 +39,12 @@ export function createGatewayServer(options: GatewayServerOptions): Server {
         }
         if (req.method === 'POST' && url.pathname === '/beta/requests') {
           await handleBetaSubmit(req, res, ctx);
+          return;
+        }
+
+        // Operator dashboard (GitHub-OAuth-gated; 503 if not configured).
+        if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+          await handleAdmin(req, res, url, ctx);
           return;
         }
 

@@ -55,6 +55,10 @@ describe('gateway proxy + auth + ACL', () => {
       relayUrl: `http://127.0.0.1:${relayPort}`,
       relayToken: RELAY_TOKEN,
       publicUrl: undefined,
+      githubClientId: undefined,
+      githubClientSecret: undefined,
+      adminLogins: [],
+      sessionSecret: undefined,
     };
     gateway = createGatewayServer({ db, config });
     const gwPort = await listen(gateway);

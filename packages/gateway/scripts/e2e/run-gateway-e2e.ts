@@ -88,6 +88,10 @@ const gateway = createGatewayServer({
     relayUrl: `http://127.0.0.1:${relayPort}`,
     relayToken: RELAY_TOKEN,
     publicUrl: undefined,
+    githubClientId: undefined,
+    githubClientSecret: undefined,
+    adminLogins: [],
+    sessionSecret: undefined,
   },
 });
 const gatewayUrl = `http://127.0.0.1:${await listen(gateway)}`;

@@ -13,13 +13,11 @@
 import { loadGatewayConfig } from './config.js';
 import { openGatewayDb } from './db.js';
 import {
+  approveAccessRequest,
   decideAccessRequest,
   getAccessRequest,
-  grantProjectAccess,
-  issueApiKey,
   listAccessRequests,
   revokeToken,
-  upsertUser,
   type AccessRequest,
 } from './store.js';
 
@@ -59,16 +57,14 @@ function main(): void {
     if (group === 'requests' && action === 'approve') {
       const id = rest[0];
       if (!id) fail('usage: requests approve <requestId> [--label <text>]');
-      const req = getAccessRequest(db, id);
-      if (!req) fail(`no such request: ${id}`);
-      if (req.status !== 'pending') {
-        console.warn(`note: request ${id} was already ${req.status}; re-approving`);
+      const existing = getAccessRequest(db, id);
+      if (!existing) fail(`no such request: ${id}`);
+      if (existing.status !== 'pending') {
+        console.warn(`note: request ${id} was already ${existing.status}; re-approving`);
       }
-      const userId = upsertUser(db, req.email);
-      grantProjectAccess(db, userId, req.requested_project_id);
-      const label = flag(rest, 'label') ?? req.email;
-      const { plaintext, prefix } = issueApiKey(db, userId, label);
-      decideAccessRequest(db, id, 'approved');
+      const result = approveAccessRequest(db, id, flag(rest, 'label'));
+      if (!result) fail(`no such request: ${id}`);
+      const { plaintext, prefix, request: req } = result;
       console.log(`approved ${id} — ${req.email} → ${req.requested_project_id}`);
       console.log(`token prefix: ${prefix}`);
       console.log('');

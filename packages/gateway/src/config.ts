@@ -9,8 +9,27 @@ export interface GatewayConfig {
   relayUrl: string;
   /** Bearer token the gateway presents to the (token-gated) relay. */
   relayToken: string | undefined;
-  /** Public base URL, used only for copy on the access-request page. */
+  /** Public base URL — used for copy on the request page and the OAuth callback. */
   publicUrl: string | undefined;
+  /** GitHub OAuth app client id (operator dashboard login). */
+  githubClientId: string | undefined;
+  /** GitHub OAuth app client secret. */
+  githubClientSecret: string | undefined;
+  /** GitHub logins allowed to operate the dashboard. */
+  adminLogins: string[];
+  /** HMAC secret for signing operator session + OAuth state cookies. */
+  sessionSecret: string | undefined;
+}
+
+/** The operator dashboard is enabled only when OAuth is fully configured. */
+export function adminEnabled(config: GatewayConfig): boolean {
+  return Boolean(
+    config.githubClientId &&
+      config.githubClientSecret &&
+      config.publicUrl &&
+      config.sessionSecret &&
+      config.adminLogins.length > 0,
+  );
 }
 
 function positiveInt(raw: string | undefined, fallback: number, name: string): number {
@@ -28,6 +47,13 @@ export function loadGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
     dbFile: env.GATEWAY_DB || './gateway.db',
     relayUrl: (env.RELAY_URL || 'http://127.0.0.1:8787').replace(/\/+$/, ''),
     relayToken: env.RELAY_INTERNAL_TOKEN || undefined,
-    publicUrl: env.GATEWAY_PUBLIC_URL || undefined,
+    publicUrl: env.GATEWAY_PUBLIC_URL ? env.GATEWAY_PUBLIC_URL.replace(/\/+$/, '') : undefined,
+    githubClientId: env.GITHUB_CLIENT_ID || undefined,
+    githubClientSecret: env.GITHUB_CLIENT_SECRET || undefined,
+    adminLogins: (env.GATEWAY_ADMIN_LOGINS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    sessionSecret: env.GATEWAY_SESSION_SECRET || undefined,
   };
 }

@@ -151,3 +151,23 @@ export function decideAccessRequest(
     id,
   );
 }
+
+/**
+ * Approve a request: upsert the user, grant project access, mint a one-time
+ * project-scoped key, and mark the request approved. Shared by the admin CLI
+ * and the operator dashboard so both behave identically. Returns null if the
+ * request id is unknown.
+ */
+export function approveAccessRequest(
+  db: Database.Database,
+  requestId: string,
+  label?: string,
+): { plaintext: string; prefix: string; request: AccessRequest } | null {
+  const request = getAccessRequest(db, requestId);
+  if (!request) return null;
+  const userId = upsertUser(db, request.email);
+  grantProjectAccess(db, userId, request.requested_project_id);
+  const { plaintext, prefix } = issueApiKey(db, userId, label ?? request.email);
+  decideAccessRequest(db, requestId, 'approved');
+  return { plaintext, prefix, request };
+}
