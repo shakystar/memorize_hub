@@ -4,30 +4,22 @@
   "private": true,
   "license": "AGPL-3.0-or-later",
   "author": "shakystar",
-  "description": "Optional relay server for memorize's cross-machine auto sync — a dumb store-and-forward queue of opaque per-project event logs over HTTP.",
+  "description": "memorize Hub — relay (transport) + gateway (control-plane) for memorize's cross-machine auto sync.",
   "type": "module",
   "packageManager": "pnpm@10.30.3",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "dev": "tsx src/index.ts",
-    "start": "node dist/index.js",
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "e2e": "pnpm build && tsx scripts/e2e/run-memorize-e2e.ts",
-    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
-    "check": "pnpm typecheck && pnpm lint && pnpm test"
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "check": "pnpm -r check"
   },
-  "devDependencies": {
-    "@types/node": "^25.6.0",
-    "@typescript-eslint/eslint-plugin": "^8.58.1",
-    "@typescript-eslint/parser": "^8.58.1",
-    "eslint": "^10.2.0",
-    "tsx": "^4.21.0",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.4"
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }
