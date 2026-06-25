@@ -1,0 +1,43 @@
+# memorize Hub on Fly.io — one machine running relay (private) + gateway (public).
+# Rename `app` and pick a region, then see docs/DEPLOY.md for secrets + steps.
+
+app = "memorize-hub"          # change to your app name (`fly apps create <name>`)
+primary_region = "nrt"        # Tokyo; pick the region nearest your machines
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  GATEWAY_PORT = "8080"
+  MEMORIZE_RELAY_PORT = "8787"
+  RELAY_URL = "http://127.0.0.1:8787"
+  MEMORIZE_RELAY_STORE = "/data/relay"
+  GATEWAY_DB = "/data/gateway.db"
+  # Non-secret operator config (secrets go via `fly secrets set` — see DEPLOY.md):
+  #   GATEWAY_PUBLIC_URL   = "https://<app>.fly.dev"
+  #   GATEWAY_ADMIN_LOGINS = "your-github-login"
+
+# Public edge = the gateway only. The relay's 8787 is never published, so it is
+# not routable from outside this machine; it is additionally token-gated.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"   # scale to zero when idle (cost: pay per run-time)
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.checks]
+    [[http_service.checks.http]]
+      method = "GET"
+      path = "/healthz"
+      interval = "30s"
+      timeout = "5s"
+
+# Durable state: relay ndjson + gateway sqlite. Back this up to keep events.
+[[mounts]]
+  source = "hub_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

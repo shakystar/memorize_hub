@@ -1,0 +1,17 @@
+# Reinstalled/rebuilt inside the image — and host node_modules holds a
+# platform-specific better-sqlite3 binary that must NOT leak into the linux image.
+node_modules
+**/node_modules
+dist
+**/dist
+
+.git
+coverage
+**/coverage
+data
+**/data
+*.db
+*.db-*
+.memorize
+.claude
+*.tsbuildinfo
