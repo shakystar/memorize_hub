@@ -267,7 +267,10 @@ JSON payload:</p>
 <p>Ids look like <code>evt_&lt;base36-time&gt;_&lt;random&gt;</code> and are minted
 once, globally. Two columns do two different jobs: <code>seq</code> is a local
 auto-increment that fixes replay order on this machine, and <code>id</code> is the
-stable global identity used for deduplication and for sync watermarks.</p>
+stable global identity used for deduplication and for sync watermarks. The shape is
+the <code>DomainEvent</code> interface in <code>src/domain/events.ts</code>; the
+table and its indexes are created by the migrations in
+<code>src/storage/db.ts</code>.</p>
 
 <h2>Storage</h2>
 <p>The store is SQLite through better-sqlite3, one database file per project. It
@@ -277,14 +280,18 @@ an ordered, append-only list of migrations gated by SQLite's
 <code>user_version</code>: on open, memorize runs every migration whose index is at
 or above the stored version inside one <code>BEGIN IMMEDIATE</code> transaction,
 then bumps the version. A second process opening the same fresh database blocks on
-the lock, reads the already-bumped version, and applies nothing.</p>
+the lock, reads the already-bumped version, and applies nothing. The connection
+setup and the ordered <code>MIGRATIONS</code> array both live in
+<code>src/storage/db.ts</code>.</p>
 
 <h2>Append and idempotency</h2>
 <p>Writes are append-only: an event is inserted, never updated or deleted in place.
 A locally produced event gets the next <code>seq</code>. Events arriving from
 another machine are inserted with <code>INSERT OR IGNORE</code>, so a row whose
 <code>id</code> already exists is skipped. That one property makes re-delivery safe:
-pulling the same range twice inserts each event at most once.</p>
+pulling the same range twice inserts each event at most once. The write path is
+<code>insertExternalEvents</code> and the watermark read is
+<code>readEventsSince</code>, both in <code>src/storage/event-store.ts</code>.</p>
 <p>Reads always come back in <code>seq</code> order. A pull since a watermark
 resolves the watermark event's <code>seq</code> and returns everything with a
 greater <code>seq</code>; an unknown watermark falls back to returning everything,
@@ -292,9 +299,10 @@ so a lost bookmark over-delivers rather than under-delivers.</p>
 
 <h2>Projections</h2>
 <p>You never read the raw log to answer a question. A single reducer,
-<code>reduceProjectState</code>, folds the ordered events into state, and a rebuild
-wipes and repopulates the projection tables (tasks, decisions, rules, memories, and
-so on) in one transaction. Because the reducer is the only writer of those tables
+<code>reduceProjectState</code> (<code>src/projections/projector.ts</code>), folds
+the ordered events into state, and a rebuild (<code>rebuildProjectProjection</code>
+in <code>src/services/projection-store.ts</code>) wipes and repopulates the
+projection tables (tasks, decisions, rules, memories, and so on) in one transaction. Because the reducer is the only writer of those tables
 and the rebuild is all-or-nothing, the projection stays a pure function of the log.
 Run it twice and you get the same tables; crash halfway and the old tables stay
 intact until the next rebuild succeeds.</p>
@@ -305,11 +313,13 @@ stamps it with an <code>invalidAt</code> timestamp and a pointer to what replace
 it, then leaves it in place, so a point-in-time replay still shows what was true
 then. The same pattern collapses duplicate consolidations: when two machines
 distill the same observations into the same memory, the reducer keeps the one with
-the smaller <code>(created_at, id)</code> and marks the rest invalid. Every machine
-picks the same winner, so the result converges with no coordination.</p>
+the smaller <code>(created_at, id)</code> and marks the rest invalid
+(<code>dedupeMemoriesBySource</code>, in the projector). Every machine picks the same
+winner, so the result converges with no coordination.</p>
 
 <h2>Crash consistency</h2>
-<p>Applying a pull is ordered on purpose: insert the events
+<p>Applying a pull (<code>applyPullResponse</code> in
+<code>src/services/sync-service.ts</code>) is ordered on purpose: insert the events
 (<code>INSERT OR IGNORE</code>), rebuild the projection, then advance the watermark
 last. If the process dies before the watermark advances, the bookmark is stale, so
 the next pull requests the same range again; the duplicate inserts are ignored and
@@ -323,6 +333,95 @@ consistency across machines with no server, no locks, and no distributed clock.
 Re-delivery is safe, replay is deterministic, and history is never lost. The next
 Internals pages cover how this log syncs between machines and how memories are
 ranked at retrieval time.</p>
+`.trim(),
+  },
+  {
+    slug: 'sync-convergence',
+    title: 'Sync and convergence',
+    section: 'Internals',
+    render: () => `
+<h1>Sync and convergence</h1>
+<p class="lead">Two machines that do not share a filesystem stay in sync by
+shipping the same append-only event log over HTTP. The origin pushes, the relay
+holds, a replica pulls later. This page traces the real path in memorize 2.x:
+<code>src/services/sync-service.ts</code>,
+<code>src/adapters/sync-transport-http.ts</code>, and the wire contract both sides
+implement (<code>memorize_hub/PROTOCOL.md</code>).</p>
+
+<h2>The wire</h2>
+<p>The HTTP transport makes two calls against the relay:</p>
+<pre><code>POST {base}/v1/projects/{remoteProjectId}/events   body: SyncPushRequest  -> SyncPushResponse
+GET  {base}/v1/projects/{remoteProjectId}/events?since={id}             -> SyncPullResponse</code></pre>
+<p>A push carries the pending events; a pull asks for everything after a marker. The
+relay treats each event as opaque JSON: it never parses or validates a payload, it
+only preserves insertion order. An optional bearer token rides in
+<code>Authorization: Bearer ...</code>.</p>
+
+<h2>Watermarks</h2>
+<p>Each machine keeps its own bookmarks in a sync-state file, not in the event log:
+<code>lastPushedEventId</code> and <code>lastPulledEventId</code>. A push slices the
+log with <code>readEventsSince(lastPushedEventId)</code> (every event with a greater
+<code>seq</code>) and sends only that; a pull sends <code>since=lastPulledEventId</code>
+and the relay returns the tail after it. After a successful push,
+<code>markPushed</code> advances the push bookmark to the relay's
+<code>lastAcceptedEventId</code>.</p>
+
+<h2>Sync bookkeeping stays local</h2>
+<p>Writing the sync state also appends a <code>sync.state.updated</code> event to the
+local log (<code>writeState</code>). That event is deliberately filtered out of every
+push: <code>buildPushPayload</code> drops <code>sync.state.updated</code> before
+sending. The reason is simple. Each machine's watermarks are private bookmarks into a
+shared log, so shipping one machine's bookmarks to another would only say where the
+first machine had read up to, which is meaningless and divergent on the second. The
+wire carries domain events only. A no-op push at an idle boundary writes zero sync
+events, to avoid log churn now that sync runs automatically.</p>
+
+<h2>Re-delivery is safe by construction</h2>
+<p>The client never relies on the relay to deduplicate. Applying a pull is ordered:
+insert the events with <code>INSERT OR IGNORE</code>, rebuild the projection, then
+advance <code>lastPulledEventId</code> last (<code>applyPullResponse</code>). If the
+process dies before the bookmark advances, the next pull requests the same range
+again; the duplicate inserts are ignored and the idempotent rebuild repeats with no
+effect. Relay-side dedup by id is recommended but optional, because the client
+absorbs duplicates either way.</p>
+
+<h2>Joining a project: true-replica clone</h2>
+<p>A second machine joins by adopting the origin's project id, never minting its own
+(<code>cloneProject</code>, memorize #30). The clone runs in a fresh directory, writes
+a sync state that points at the remote, binds the directory, and pulls. The remote's
+<code>project.created</code> arrives as the first event, so both machines share one
+identity (git analog: same commit ids, different working copy). Two guards keep this
+honest: clone refuses a directory already bound to a different project id (that would
+be a diverged-history merge, still unsupported), and the reducer throws if it ever
+sees two different <code>project.created</code> ids in one log instead of silently
+letting the last one win.</p>
+
+<h2>What actually converges</h2>
+<p>Sync guarantees that every machine ends up holding the same set of events, because
+re-delivery is idempotent and ids are global. On top of that set, two layers make the
+derived state agree:</p>
+<ul>
+ <li><strong>Memories</strong> distilled concurrently on two machines from the same
+ observations collapse to one. The projector groups still-valid memories by their
+ source observation ids plus kind plus normalized text, keeps the winner by
+ <code>(createdAt, id)</code> ascending, and marks the rest invalid
+ (<code>dedupeMemoriesBySource</code>). It is content-keyed and pure, so every replica
+ picks the same winner regardless of the order events arrived.</li>
+ <li><strong>Structural entities</strong> (tasks, decisions, rules) replay in each
+ machine's local <code>seq</code> order, which is the insertion order on that machine.
+ Within one machine that order is causal, so ordinary edits agree. Concurrent edits to
+ the same field on two machines are resolved by replay order today, not by a logical
+ clock; a hybrid logical clock for a strict cross-machine total order is tracked as
+ memorize #39.</li>
+</ul>
+
+<h2>Where the Hub fits</h2>
+<p>The Hub is this relay with a control plane in front. It stores the opaque events,
+preserves their order, deduplicates by id, and injects the internal relay token after
+checking your project-scoped key. It never interprets a payload, so the client schema
+can evolve without touching it. See <a href="/docs/connect">Connect</a> for the
+commands and <a href="/docs/event-sourcing">Event sourcing core</a> for the log and
+projection underneath.</p>
 `.trim(),
   },
 ];

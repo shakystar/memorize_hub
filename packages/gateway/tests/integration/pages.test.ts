@@ -128,6 +128,16 @@ describe('public pages: landing + docs + beta', () => {
     const html = await res.text();
     expect(html).toContain('Event sourcing core');
     expect(html).toContain('INSERT OR IGNORE');
+    expect(html).toContain('src/storage/event-store.ts');
+  });
+
+  it('serves the sync-convergence internals page', async () => {
+    const res = await fetch(`${base}/docs/sync-convergence`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Sync and convergence');
+    expect(html).toContain('lastPulledEventId');
+    expect(html).toContain('sync.state.updated');
   });
 
   it('groups the sidebar into sections', async () => {
