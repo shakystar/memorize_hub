@@ -6,6 +6,7 @@ import { handleAccount } from './account.js';
 import { handleBetaPage, handleBetaSubmit } from './beta.js';
 import type { GatewayConfig } from './config.js';
 import { handleAdmin } from './dashboard.js';
+import { handleOAuthCallback } from './oauth-callback.js';
 import { handleDocs } from './docs.js';
 import { handleLanding } from './landing.js';
 import { handleEventsProxy, sendJson, type ProxyContext } from './proxy.js';
@@ -54,6 +55,12 @@ export function createGatewayServer(options: GatewayServerOptions): Server {
         }
         if (req.method === 'POST' && url.pathname === '/beta/requests') {
           await handleBetaSubmit(req, res, ctx);
+          return;
+        }
+
+        // Shared OAuth return point for both the operator and participant flows.
+        if (req.method === 'GET' && url.pathname === '/oauth/callback') {
+          await handleOAuthCallback(req, res, url, ctx);
           return;
         }
 

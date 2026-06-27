@@ -1,19 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { adminEnabled } from './config.js';
-import {
-  beginLogin,
-  checkState,
-  clearStateCookie,
-  resolveLogin,
-} from './oauth.js';
+import { beginLogin } from './oauth.js';
 import type { ProxyContext } from './proxy.js';
-import {
-  clearOperatorCookie,
-  operatorCookie,
-  parseCookies,
-  readOperator,
-} from './session.js';
+import { clearOperatorCookie, readOperator } from './session.js';
 import {
   approveAccessRequest,
   decideAccessRequest,
@@ -133,26 +123,10 @@ export async function handleAdmin(
   const path = url.pathname;
 
   // --- OAuth entry / return ---
+  // The return leg is the shared /oauth/callback (see oauth-callback.ts).
   if (req.method === 'GET' && path === '/admin/login') {
-    const { redirectTo, setCookie } = beginLogin(config);
+    const { redirectTo, setCookie } = beginLogin(config, { flow: 'admin' });
     redirect(res, redirectTo, setCookie);
-    return;
-  }
-  if (req.method === 'GET' && path === '/admin/callback') {
-    const cookieState = parseCookies(req.headers.cookie)['hub_oauth_state'];
-    if (!checkState(url.searchParams.get('state') ?? undefined, cookieState, secret)) {
-      send(res, 403, '<h1>Login failed</h1><p>Invalid state. <a href="/admin/login">Try again</a>.</p>');
-      return;
-    }
-    const code = url.searchParams.get('code');
-    const resolved = code ? await resolveLogin(config, code) : null;
-    if (!resolved || !config.adminLogins.includes(resolved.login)) {
-      send(res, 403, '<h1>Not authorized</h1><p class="muted">This GitHub account is not an operator.</p>', {
-        'set-cookie': clearStateCookie(),
-      });
-      return;
-    }
-    redirect(res, '/admin', [operatorCookie(resolved.login, secret), clearStateCookie()]);
     return;
   }
   if (req.method === 'GET' && path === '/admin/logout') {

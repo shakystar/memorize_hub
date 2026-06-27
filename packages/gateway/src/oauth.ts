@@ -5,13 +5,10 @@ import { signValue, verifyValue } from './session.js';
 
 /**
  * Minimal GitHub OAuth (authorization code), shared by two flows: the operator
- * dashboard (`/admin/*`) and participant self-service (`/account/*`). The flows
- * differ only in callback path, the state-cookie Path scope, and the requested
- * scope — everything else (state signing, code exchange) is identical.
- *
- * A single GitHub OAuth App backs both: register its Authorization callback URL
- * at the site root so both `/admin/callback` and `/account/callback` are valid
- * sub-paths.
+ * dashboard and participant self-service. Both use ONE callback path,
+ * `/oauth/callback`, so a single GitHub OAuth App registers exactly that URL —
+ * no reliance on GitHub's sub-directory redirect_uri matching. The flow is
+ * carried in the signed `state` and dispatched at the shared callback.
  */
 
 const AUTHORIZE = 'https://github.com/login/oauth/authorize';
@@ -21,58 +18,68 @@ const EMAILS = 'https://api.github.com/user/emails';
 const STATE_COOKIE = 'hub_oauth_state';
 const STATE_TTL_MS = 10 * 60 * 1000;
 
-const DEFAULT_CALLBACK = '/admin/callback';
-const DEFAULT_COOKIE_PATH = '/admin';
+/** The one callback path both flows return to (register this exact URL on the app). */
+export const CALLBACK_PATH = '/oauth/callback';
+const COOKIE_PATH = '/oauth';
 const DEFAULT_SCOPE = 'read:user';
 
+export type OAuthFlow = 'admin' | 'participant';
+
+export function callbackUrl(config: GatewayConfig): string {
+  return `${config.publicUrl}${CALLBACK_PATH}`;
+}
+
 export interface LoginOptions {
-  /** Path GitHub redirects back to (must be a sub-path of the registered callback). */
-  callbackPath?: string;
-  /** Path the signed state cookie is scoped to (matches the callback's directory). */
-  cookiePath?: string;
+  /** Which surface initiated login; dispatched at the shared callback. */
+  flow: OAuthFlow;
   /** OAuth scope; the participant flow adds `user:email` to read a verified email. */
   scope?: string;
 }
 
-export function callbackUrl(config: GatewayConfig, path: string = DEFAULT_CALLBACK): string {
-  return `${config.publicUrl}${path}`;
-}
-
-/** Build the authorize redirect + a signed state cookie to set alongside it. */
+/** Build the authorize redirect + a signed state cookie (carrying the flow). */
 export function beginLogin(
   config: GatewayConfig,
-  opts: LoginOptions = {},
+  opts: LoginOptions,
 ): { redirectTo: string; setCookie: string } {
-  const callbackPath = opts.callbackPath ?? DEFAULT_CALLBACK;
-  const cookiePath = opts.cookiePath ?? DEFAULT_COOKIE_PATH;
   const scope = opts.scope ?? DEFAULT_SCOPE;
   const nonce = randomBytes(16).toString('base64url');
-  const state = signValue({ nonce, exp: Date.now() + STATE_TTL_MS }, config.sessionSecret!);
+  const state = signValue(
+    { nonce, flow: opts.flow, exp: Date.now() + STATE_TTL_MS },
+    config.sessionSecret!,
+  );
   const url = new URL(AUTHORIZE);
   url.searchParams.set('client_id', config.githubClientId!);
-  url.searchParams.set('redirect_uri', callbackUrl(config, callbackPath));
+  url.searchParams.set('redirect_uri', callbackUrl(config));
   url.searchParams.set('scope', scope);
   url.searchParams.set('state', state);
   return {
     redirectTo: url.toString(),
-    setCookie: `${STATE_COOKIE}=${state}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Secure; Max-Age=${STATE_TTL_MS / 1000}`,
+    setCookie: `${STATE_COOKIE}=${state}; Path=${COOKIE_PATH}; HttpOnly; SameSite=Lax; Secure; Max-Age=${STATE_TTL_MS / 1000}`,
   };
 }
 
-/** Verify the returned state against the signed cookie (CSRF protection). */
-export function checkState(
+export interface CallbackState {
+  flow: OAuthFlow;
+}
+
+/**
+ * Verify the returned state against the signed cookie (CSRF guard) and recover
+ * the flow. Returns null on any mismatch, bad signature, expiry, or unknown flow.
+ */
+export function verifyCallback(
   returnedState: string | undefined,
   cookieState: string | undefined,
   secret: string,
-): boolean {
-  if (!returnedState || !cookieState || returnedState !== cookieState) return false;
-  return verifyValue(returnedState, secret) !== null;
+): CallbackState | null {
+  if (!returnedState || !cookieState || returnedState !== cookieState) return null;
+  const payload = verifyValue<{ flow?: OAuthFlow }>(returnedState, secret);
+  if (!payload || (payload.flow !== 'admin' && payload.flow !== 'participant')) return null;
+  return { flow: payload.flow };
 }
 
-/** Expire the OAuth state cookie for the given flow's path scope. */
-export function clearStateCookie(cookiePath: string = DEFAULT_COOKIE_PATH): string {
-  return `${STATE_COOKIE}=; Path=${cookiePath}; HttpOnly; SameSite=Lax; Secure; Max-Age=0`;
-}
+export const clearStateCookie = `${STATE_COOKIE}=; Path=${COOKIE_PATH}; HttpOnly; SameSite=Lax; Secure; Max-Age=0`;
+
+export const STATE_COOKIE_NAME = STATE_COOKIE;
 
 export interface ResolvedLogin {
   login: string;
@@ -81,7 +88,6 @@ export interface ResolvedLogin {
 }
 
 interface ResolveOptions {
-  callbackPath?: string;
   /** Fetch the user's primary verified email (requires the `user:email` scope). */
   fetchEmail?: boolean;
 }
@@ -102,7 +108,7 @@ export async function resolveLogin(
       client_id: config.githubClientId,
       client_secret: config.githubClientSecret,
       code,
-      redirect_uri: callbackUrl(config, opts.callbackPath ?? DEFAULT_CALLBACK),
+      redirect_uri: callbackUrl(config),
     }),
   });
   if (!tokenRes.ok) return null;

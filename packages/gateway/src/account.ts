@@ -1,12 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { participantLoginEnabled } from './config.js';
-import { beginLogin, checkState, clearStateCookie, resolveLogin } from './oauth.js';
+import { beginLogin } from './oauth.js';
 import type { ProxyContext } from './proxy.js';
 import {
   clearParticipantCookie,
-  parseCookies,
-  participantCookie,
   readParticipant,
   type ParticipantSession,
 } from './session.js';
@@ -18,7 +16,6 @@ import {
   listProjectAccess,
   revokeToken,
   tokenBelongsToUser,
-  upsertUserByGithub,
   type AccessRequest,
   type ProjectGrant,
   type TokenSummary,
@@ -36,12 +33,8 @@ import { htmlEscape, layout } from './views.js';
 const PROJECT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_FORM_BYTES = 16 * 1024;
 
-/** The participant OAuth flow: own callback + cookie path, plus email scope. */
-const USER_FLOW = {
-  callbackPath: '/account/callback',
-  cookiePath: '/account',
-  scope: 'read:user user:email',
-} as const;
+/** Participant login asks for the email scope so we can attach a verified email. */
+const PARTICIPANT_SCOPE = 'read:user user:email';
 
 function readForm(req: IncomingMessage): Promise<URLSearchParams> {
   return new Promise((resolve, reject) => {
@@ -198,32 +191,13 @@ export async function handleAccount(
   const path = url.pathname;
 
   // --- OAuth entry / return ---
+  // The return leg is the shared /oauth/callback (see oauth-callback.ts).
   if (req.method === 'GET' && path === '/account/login') {
-    const { redirectTo, setCookie } = beginLogin(config, USER_FLOW);
+    const { redirectTo, setCookie } = beginLogin(config, {
+      flow: 'participant',
+      scope: PARTICIPANT_SCOPE,
+    });
     redirect(res, redirectTo, setCookie);
-    return;
-  }
-  if (req.method === 'GET' && path === '/account/callback') {
-    const cookieState = parseCookies(req.headers.cookie)['hub_oauth_state'];
-    if (!checkState(url.searchParams.get('state') ?? undefined, cookieState, secret)) {
-      send(res, 403, '<h1>Login failed</h1><p>Invalid state. <a href="/account/login">Try again</a>.</p>');
-      return;
-    }
-    const code = url.searchParams.get('code');
-    const resolved = code
-      ? await resolveLogin(config, code, { callbackPath: USER_FLOW.callbackPath, fetchEmail: true })
-      : null;
-    if (!resolved || !resolved.email) {
-      send(res, 403, '<h1>Login failed</h1><p class="muted">Could not read your GitHub identity.</p>', {
-        'set-cookie': clearStateCookie(USER_FLOW.cookiePath),
-      });
-      return;
-    }
-    const userId = upsertUserByGithub(db, resolved.login, resolved.email);
-    redirect(res, '/account', [
-      participantCookie({ userId, login: resolved.login, email: resolved.email }, secret),
-      clearStateCookie(USER_FLOW.cookiePath),
-    ]);
     return;
   }
   if (req.method === 'GET' && path === '/account/logout') {
