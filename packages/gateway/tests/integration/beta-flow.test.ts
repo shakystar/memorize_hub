@@ -84,7 +84,7 @@ describe('beta request → approval → scoped sync (full loop)', () => {
     const res = await fetch(`${gatewayUrl}/beta`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/text\/html/);
-    expect(await res.text()).toContain('request beta access');
+    expect(await res.text()).toContain('Request beta access');
   });
 
   it('runs the loop: submit → pending → approve → key syncs only its project', async () => {
