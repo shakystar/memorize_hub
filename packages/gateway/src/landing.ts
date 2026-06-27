@@ -3,21 +3,21 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ProxyContext } from './proxy.js';
 import { layout } from './views.js';
 
-/** Public landing page (`GET /`). Hub-centric, beta-operation focused — no
+/** Public landing page (`GET /`). Hub-centric, beta-operation focused - no
  * sales/pricing copy. Primary CTA routes to the beta access-request form. */
 
 const BODY = `
 <h1>Cross-machine sync for your memorize projects</h1>
 <p class="lead">memorize is shared memory for AI coding agents. The Hub relays that
-memory between machines that don't share a filesystem — your origin pushes, the
+memory between machines that don't share a filesystem - your origin pushes, the
 Hub holds, your other machines pull on the next boundary.</p>
 
 <a class="btn" href="/beta">Request beta access</a>
 
 <p class="muted"><strong>New to memorize?</strong>
-<a href="/docs/getting-started">Install it first →</a> (your AI assistant can do
+<a href="/docs/getting-started">Install it first -></a> (your AI assistant can do
 it in one step), then request a key to sync across machines. Sync is in private
-beta; an operator issues project-scoped keys. <a href="/docs">Docs</a> ·
+beta; an operator issues project-scoped keys. <a href="/docs">Docs</a> /
 <a href="https://github.com/shakystar/memorize">memorize on GitHub</a>.</p>
 
 <h2>How it works</h2>
@@ -25,7 +25,7 @@ beta; an operator issues project-scoped keys. <a href="/docs">Docs</a> ·
  <li><strong>Request access</strong> for a project at <a href="/beta">/beta</a>.</li>
  <li>An operator <strong>approves</strong> and sends you a one-time, project-scoped API key.</li>
  <li>Point memorize at the Hub with <code>--remote-url</code> and <code>--token</code> on
- each machine — events converge. <a href="/docs">Connect guide →</a></li>
+ each machine - events converge. <a href="/docs">Connect guide -></a></li>
 </ol>
 `.trim();
 
@@ -35,5 +35,5 @@ export function handleLanding(
   _ctx: ProxyContext,
 ): void {
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  res.end(layout({ title: 'memorize Hub — cross-machine sync for memorize', body: BODY }));
+  res.end(layout({ title: 'memorize Hub - cross-machine sync for memorize', body: BODY }));
 }

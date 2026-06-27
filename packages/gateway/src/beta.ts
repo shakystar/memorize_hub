@@ -4,14 +4,14 @@ import type { ProxyContext } from './proxy.js';
 import { createAccessRequest } from './store.js';
 import { htmlEscape, layout } from './views.js';
 
-/** Public beta access-request surface. No auth — anyone may request; an operator
+/** Public beta access-request surface. No auth - anyone may request; an operator
  * approves manually via hub-gateway-admin. */
 
 const PROJECT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MAX_FORM_BYTES = 16 * 1024;
 
-// Naive per-IP rate limit: at most N submissions per window. In-memory only —
+// Naive per-IP rate limit: at most N submissions per window. In-memory only -
 // adequate for a small beta behind a single gateway process.
 const RATE_LIMIT = 5;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
@@ -25,7 +25,7 @@ function rateLimited(ip: string, now: number): boolean {
 }
 
 const FORM = layout({
-  title: 'memorize Hub — beta access',
+  title: 'memorize Hub - beta access',
   body: `
 <h1>Request beta access</h1>
 <p class="muted">The Hub relays memorize's cross-machine sync. Request access to a
@@ -34,7 +34,7 @@ project and an operator will issue you a project-scoped API key.</p>
  <label for="email">Email</label>
  <input id="email" name="email" type="email" required placeholder="you@example.com">
  <label for="project">Project id</label>
- <input id="project" name="projectId" required placeholder="proj_…">
+ <input id="project" name="projectId" required placeholder="proj_...">
  <label for="note">Note <span class="muted">(optional)</span></label>
  <textarea id="note" name="note" rows="3" placeholder="Which machines? What for?"></textarea>
  <button class="submit" type="submit">Request access</button>
@@ -66,7 +66,7 @@ function readForm(req: IncomingMessage): Promise<URLSearchParams> {
 
 function reply(res: ServerResponse, status: number, body: string): void {
   res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' });
-  res.end(layout({ title: 'memorize Hub — beta access', body }));
+  res.end(layout({ title: 'memorize Hub - beta access', body }));
 }
 
 export async function handleBetaSubmit(
@@ -97,7 +97,7 @@ export async function handleBetaSubmit(
       res,
       400,
       '<h1>Check your details</h1><p>A valid email and a project id like ' +
-        '<code>proj_…</code> are required. <a href="/beta">Back</a></p>',
+        '<code>proj_...</code> are required. <a href="/beta">Back</a></p>',
     );
     return;
   }
@@ -106,7 +106,7 @@ export async function handleBetaSubmit(
   reply(
     res,
     201,
-    `<h1>Request received</h1><p>Thanks — your request <code>${htmlEscape(id)}</code> for ` +
+    `<h1>Request received</h1><p>Thanks - your request <code>${htmlEscape(id)}</code> for ` +
       `<code>${htmlEscape(projectId)}</code> is pending operator approval. You'll receive an ` +
       `API key by email.</p>`,
   );

@@ -17,7 +17,7 @@ container; the gateway is the only public surface.
 ## Privacy / threat model (read this before onboarding others)
 
 Events are stored **as plaintext JSON** on the relay. "Opaque" in the design
-means the relay does not *interpret* payloads — **not** that they are encrypted.
+means the relay does not *interpret* payloads - **not** that they are encrypted.
 
 - **In transit:** encrypted (HTTPS/TLS terminated at the gateway edge).
 - **Access control:** a participant's API key is scoped to specific projects;
@@ -25,10 +25,10 @@ means the relay does not *interpret* payloads — **not** that they are encrypte
 - **At rest / from the operator:** **plaintext.** Whoever runs the Hub can read
   every participant's memory content on disk.
 
-So this is an **operator-trusted** model — fine when the operator is you and the
+So this is an **operator-trusted** model - fine when the operator is you and the
 machines are yours. End-to-end encryption (encrypt payloads client-side, keep
 `event.id` plaintext) is a **future memorize-client feature** and needs **no Hub
-change** because the relay is already payload-opaque — tracked at
+change** because the relay is already payload-opaque - tracked at
 [memorize#182](https://github.com/shakystar/memorize/issues/182). Until then,
 only onboard participants who are willing to have the operator able to read
 their content.
@@ -40,15 +40,15 @@ their content.
 This is the local cross-machine test: run the Hub, then point **two memorize
 homes** (`MEMORIZE_ROOT` = the replica boundary, *not* the project folder) at it.
 
-**Option A — automated.** The gateway e2e does the whole loop (key issue → push →
-clone → convergence) and reports latency:
+**Option A - automated.** The gateway e2e does the whole loop (key issue -> push ->
+clone -> convergence) and reports latency:
 
 ```bash
 pnpm -r build
 pnpm --filter @shakystar/memorize-hub-gateway e2e
 ```
 
-**Option B — by hand.**
+**Option B - by hand.**
 
 ```bash
 # 1. Run the Hub (relay private + gateway public) in one container:
@@ -66,14 +66,14 @@ GATEWAY_DB=./hub-data/gateway.db \
   node packages/gateway/dist/admin-cli.js requests approve <requestId>   # prints the key once
 
 # 3. Two "machines" = two MEMORIZE_ROOTs against the gateway:
-MEMORIZE_ROOT=~/.mz-a memorize project init                              # → projectId
+MEMORIZE_ROOT=~/.mz-a memorize project init                              # -> projectId
 MEMORIZE_ROOT=~/.mz-a memorize project sync --push --remote-url http://localhost:8080 --token <key>
 MEMORIZE_ROOT=~/.mz-b memorize project clone <projectId> --remote-url http://localhost:8080 --token <key>
-#    → events converge. (The key must be scoped to <projectId>; grant it for the
+#    -> events converge. (The key must be scoped to <projectId>; grant it for the
 #      project the participant actually creates.)
 ```
 
-> Note: this measures **async (poll-on-boundary)** convergence — the beta target.
+> Note: this measures **async (poll-on-boundary)** convergence - the beta target.
 > Real-time SSE push (memorize P3-c) is not built; this is its future testbed.
 
 ---
@@ -92,7 +92,7 @@ fly volumes create hub_data --size 1 --region nrt   # durable /data (match prima
 ```
 
 ### 2. GitHub OAuth app (operator dashboard)
-Create one at https://github.com/settings/developers → **New OAuth App**:
+Create one at https://github.com/settings/developers -> **New OAuth App**:
 - **Homepage URL:** `https://<your-app-name>.fly.dev`
 - **Authorization callback URL:** `https://<your-app-name>.fly.dev/admin/callback`
 
@@ -109,20 +109,20 @@ fly secrets set \
   GATEWAY_ADMIN_LOGINS="<your-github-login>"
 ```
 `start-hub.mjs` mirrors `RELAY_INTERNAL_TOKEN` into `MEMORIZE_RELAY_TOKEN`, so the
-relay gates on the same value the gateway presents — one secret, both sides.
+relay gates on the same value the gateway presents - one secret, both sides.
 
 ### 4. Deploy + verify
 ```bash
 fly deploy
 curl https://<your-app-name>.fly.dev/healthz          # {"ok":true}
 open  https://<your-app-name>.fly.dev/beta            # public request page
-open  https://<your-app-name>.fly.dev/admin          # GitHub sign-in → dashboard
+open  https://<your-app-name>.fly.dev/admin          # GitHub sign-in -> dashboard
 ```
 
 ### 5. Onboard a beta participant
 1. They submit the form at `/beta` (email + their project id).
 2. You approve at `/admin` (or `hub-gateway-admin requests approve <id>` via
-   `fly ssh console`) — the dashboard shows the **one-time API key**.
+   `fly ssh console`) - the dashboard shows the **one-time API key**.
 3. Send them the key. They configure memorize:
    `memorize project sync --bind <projectId>` then sync with
    `--remote-url https://<your-app-name>.fly.dev --token <key>`.

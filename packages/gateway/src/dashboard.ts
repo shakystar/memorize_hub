@@ -34,7 +34,7 @@ function esc(s: string): string {
 function page(body: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>memorize Hub — operator</title>
+<title>memorize Hub - operator</title>
 <style>
  body{font:15px/1.5 system-ui,sans-serif;max-width:48rem;margin:3rem auto;padding:0 1rem;color:#1a1a1a}
  h1{font-size:1.3rem} table{border-collapse:collapse;width:100%;margin-top:1rem}
@@ -79,7 +79,7 @@ function readForm(req: IncomingMessage): Promise<URLSearchParams> {
 }
 
 function loginView(): string {
-  return `<h1>memorize Hub — operator</h1>
+  return `<h1>memorize Hub - operator</h1>
 <p class="muted">Sign in with an authorized GitHub account to review beta access requests.</p>
 <p><a class="btn" href="/admin/login">Sign in with GitHub</a></p>`;
 }
@@ -100,7 +100,7 @@ function dashboardView(login: string, pending: AccessRequest[], decided: number)
     )
     .join('');
   return `<h1>Beta access requests</h1>
-<p class="muted">Signed in as <code>${esc(login)}</code> · <a href="/admin/logout">sign out</a> · ${decided} already decided</p>
+<p class="muted">Signed in as <code>${esc(login)}</code> / <a href="/admin/logout">sign out</a> / ${decided} already decided</p>
 ${
     pending.length === 0
       ? '<p>No pending requests.</p>'
@@ -110,8 +110,8 @@ ${
 
 function keyIssuedView(req: AccessRequest, plaintext: string): string {
   return `<h1>Approved</h1>
-<p><code>${esc(req.email)}</code> → <code>${esc(req.requested_project_id)}</code></p>
-<div class="key"><strong>API key (shown once — copy and send it to the participant):</strong><br><code>${esc(plaintext)}</code></div>
+<p><code>${esc(req.email)}</code> -> <code>${esc(req.requested_project_id)}</code></p>
+<div class="key"><strong>API key (shown once - copy and send it to the participant):</strong><br><code>${esc(plaintext)}</code></div>
 <p><a class="btn" href="/admin">Back to requests</a></p>`;
 }
 
