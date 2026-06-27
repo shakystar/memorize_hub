@@ -74,11 +74,19 @@ describe('public pages: landing + docs + beta', () => {
     expect(html).toContain('<form method="POST" action="/beta/requests"');
   });
 
-  it('serves getting-started as the default /docs page', async () => {
+  it('serves overview as the default /docs page', async () => {
     const res = await fetch(`${base}/docs`);
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain('Install');
+    expect(html).toContain('What is memorize');
+    expect(html).toContain('How it works');
+    expect(html).toContain('href="/docs/getting-started"');
+  });
+
+  it('serves getting-started by slug with the install steps', async () => {
+    const res = await fetch(`${base}/docs/getting-started`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
     expect(html).toContain('project setup');
     expect(html).toContain('install claude');
   });

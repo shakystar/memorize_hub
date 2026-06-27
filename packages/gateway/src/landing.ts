@@ -14,9 +14,11 @@ Hub holds, your other machines pull on the next boundary.</p>
 
 <a class="btn" href="/beta">Request beta access</a>
 
-<p class="muted">Sync is in private beta. Request a project-scoped key and an
-operator will issue one. See the <a href="/docs">docs</a> to connect, or
-memorize itself on <a href="https://github.com/shakystar/memorize">GitHub</a>.</p>
+<p class="muted"><strong>New to memorize?</strong>
+<a href="/docs/getting-started">Install it first →</a> (your AI assistant can do
+it in one step), then request a key to sync across machines. Sync is in private
+beta; an operator issues project-scoped keys. <a href="/docs">Docs</a> ·
+<a href="https://github.com/shakystar/memorize">memorize on GitHub</a>.</p>
 
 <h2>How it works</h2>
 <ol class="steps">
