@@ -1,7 +1,7 @@
 # memorize Hub on Fly.io — one machine running relay (private) + gateway (public).
 # Rename `app` and pick a region, then see docs/DEPLOY.md for secrets + steps.
 
-app = "memorize-hub"          # change to your app name (`fly apps create <name>`)
+app = "memorize-hub-shakystar"   # change to your app name (`fly apps create <name>`)
 primary_region = "nrt"        # Tokyo; pick the region nearest your machines
 
 [build]
@@ -26,12 +26,11 @@ primary_region = "nrt"        # Tokyo; pick the region nearest your machines
   auto_start_machines = true
   min_machines_running = 0
 
-  [http_service.checks]
-    [[http_service.checks.http]]
-      method = "GET"
-      path = "/healthz"
-      interval = "30s"
-      timeout = "5s"
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "30s"
+    timeout = "5s"
 
 # Durable state: relay ndjson + gateway sqlite. Back this up to keep events.
 [[mounts]]
