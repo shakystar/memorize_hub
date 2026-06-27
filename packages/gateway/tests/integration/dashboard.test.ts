@@ -139,11 +139,13 @@ describe('operator dashboard', () => {
     expect(res.body).toContain('beta@example.com');
   });
 
-  it('approves via the dashboard and shows the one-time key', async () => {
+  it('approves via the dashboard: grants access, no key minted (self-served at /account)', async () => {
     const id = createAccessRequest(db, 'two@example.com', 'proj_dash2');
     const res = await req(base, '/admin/approve', { method: 'POST', cookie, form: { requestId: id } });
     expect(res.status).toBe(200);
-    expect(res.body).toMatch(/mzk_[\w-]+/);
+    expect(res.body).toContain('Access granted');
+    // Approval no longer leaks a key — the participant mints their own.
+    expect(res.body).not.toMatch(/mzk_[\w-]+/);
     expect(listAccessRequests(db, 'pending').some((r) => r.id === id)).toBe(false);
     expect(listAccessRequests(db, 'approved').some((r) => r.id === id)).toBe(true);
   });

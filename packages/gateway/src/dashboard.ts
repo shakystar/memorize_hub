@@ -108,10 +108,12 @@ ${
   }`;
 }
 
-function keyIssuedView(req: AccessRequest, plaintext: string): string {
+function approvedView(req: AccessRequest): string {
   return `<h1>Approved</h1>
 <p><code>${esc(req.email)}</code> -> <code>${esc(req.requested_project_id)}</code></p>
-<div class="key"><strong>API key (shown once - copy and send it to the participant):</strong><br><code>${esc(plaintext)}</code></div>
+<p class="muted">Access granted. The participant signs in at <code>/account</code> and
+generates their own API key — no key to courier. For a participant who cannot use
+GitHub login, run <code>hub-gateway-admin tokens issue ${esc(req.email)}</code>.</p>
 <p><a class="btn" href="/admin">Back to requests</a></p>`;
 }
 
@@ -143,14 +145,14 @@ export async function handleAdmin(
       return;
     }
     const code = url.searchParams.get('code');
-    const login = code ? await resolveLogin(config, code) : null;
-    if (!login || !config.adminLogins.includes(login)) {
+    const resolved = code ? await resolveLogin(config, code) : null;
+    if (!resolved || !config.adminLogins.includes(resolved.login)) {
       send(res, 403, '<h1>Not authorized</h1><p class="muted">This GitHub account is not an operator.</p>', {
-        'set-cookie': clearStateCookie,
+        'set-cookie': clearStateCookie(),
       });
       return;
     }
-    redirect(res, '/admin', [operatorCookie(login, secret), clearStateCookie]);
+    redirect(res, '/admin', [operatorCookie(resolved.login, secret), clearStateCookie()]);
     return;
   }
   if (req.method === 'GET' && path === '/admin/logout') {
@@ -185,7 +187,7 @@ export async function handleAdmin(
         send(res, 404, '<h1>Unknown request</h1><p><a href="/admin">Back</a></p>');
         return;
       }
-      send(res, 200, keyIssuedView(result.request, result.plaintext));
+      send(res, 200, approvedView(result.request));
       return;
     }
     decideAccessRequest(db, requestId, 'denied');

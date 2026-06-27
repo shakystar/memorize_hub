@@ -54,6 +54,39 @@ export function hasProjectAccess(
   return row !== undefined;
 }
 
+/**
+ * Get-or-create a user from a GitHub identity; returns the user id. Resolves by
+ * github_login first, then by email (attaching the login to a pre-existing
+ * email-keyed row, e.g. one created by an anonymous /beta request), else inserts.
+ * email stays the cross-channel anchor; github_login is the stable OAuth handle.
+ */
+export function upsertUserByGithub(
+  db: Database.Database,
+  login: string,
+  email: string,
+): string {
+  const byLogin = db.prepare('SELECT id FROM users WHERE github_login = ?').get(login) as
+    | { id: string }
+    | undefined;
+  if (byLogin) return byLogin.id;
+
+  const byEmail = db.prepare('SELECT id, github_login FROM users WHERE email = ?').get(email) as
+    | { id: string; github_login: string | null }
+    | undefined;
+  if (byEmail) {
+    if (!byEmail.github_login) {
+      db.prepare('UPDATE users SET github_login = ? WHERE id = ?').run(login, byEmail.id);
+    }
+    return byEmail.id;
+  }
+
+  const id = newId('usr');
+  db.prepare(
+    'INSERT INTO users (id, email, github_login, created_at) VALUES (?, ?, ?, ?)',
+  ).run(id, email, login, nowIso());
+  return id;
+}
+
 /** Get-or-create a user by email; returns the user id. */
 export function upsertUser(db: Database.Database, email: string): string {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as
@@ -106,6 +139,52 @@ export function revokeToken(db: Database.Database, tokenId: string): boolean {
   return result.changes > 0;
 }
 
+export interface ProjectGrant {
+  project_id: string;
+  role: string;
+  created_at: string;
+}
+
+/** The projects a user may sync, with their role (read surface for /account). */
+export function listProjectAccess(db: Database.Database, userId: string): ProjectGrant[] {
+  return db
+    .prepare(
+      'SELECT project_id, role, created_at FROM project_acl WHERE user_id = ? ORDER BY created_at',
+    )
+    .all(userId) as ProjectGrant[];
+}
+
+export interface TokenSummary {
+  id: string;
+  prefix: string;
+  label: string | null;
+  created_at: string;
+  revoked_at: string | null;
+  last_used_at: string | null;
+}
+
+/** A user's keys, non-secret metadata only (the plaintext is never stored). */
+export function listApiTokens(db: Database.Database, userId: string): TokenSummary[] {
+  return db
+    .prepare(
+      `SELECT id, prefix, label, created_at, revoked_at, last_used_at
+         FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC`,
+    )
+    .all(userId) as TokenSummary[];
+}
+
+/** Ownership gate for self-service revoke: does this token belong to this user? */
+export function tokenBelongsToUser(
+  db: Database.Database,
+  tokenId: string,
+  userId: string,
+): boolean {
+  const row = db
+    .prepare('SELECT 1 FROM api_tokens WHERE id = ? AND user_id = ?')
+    .get(tokenId, userId);
+  return row !== undefined;
+}
+
 /** Record a beta access request (status=pending). */
 export function createAccessRequest(
   db: Database.Database,
@@ -139,6 +218,16 @@ export function listAccessRequests(
   return (status ? stmt.all(status) : stmt.all()) as AccessRequest[];
 }
 
+/** A user's own access requests (for the /account dashboard). */
+export function listAccessRequestsByEmail(
+  db: Database.Database,
+  email: string,
+): AccessRequest[] {
+  return db
+    .prepare('SELECT * FROM access_requests WHERE email = ? ORDER BY created_at DESC')
+    .all(email) as AccessRequest[];
+}
+
 /** Mark a request approved/denied. */
 export function decideAccessRequest(
   db: Database.Database,
@@ -153,21 +242,34 @@ export function decideAccessRequest(
 }
 
 /**
- * Approve a request: upsert the user, grant project access, mint a one-time
- * project-scoped key, and mark the request approved. Shared by the admin CLI
- * and the operator dashboard so both behave identically. Returns null if the
- * request id is unknown.
+ * Approve a request: upsert the user, grant project access, and mark approved.
+ * Approval no longer mints a key — the participant self-serves their key from
+ * /account (or, for non-OAuth users, the operator runs `tokens issue`). This
+ * keeps the operator out of key delivery. Returns null if the id is unknown.
  */
 export function approveAccessRequest(
   db: Database.Database,
   requestId: string,
-  label?: string,
-): { plaintext: string; prefix: string; request: AccessRequest } | null {
+): { request: AccessRequest } | null {
   const request = getAccessRequest(db, requestId);
   if (!request) return null;
   const userId = upsertUser(db, request.email);
   grantProjectAccess(db, userId, request.requested_project_id);
-  const { plaintext, prefix } = issueApiKey(db, userId, label ?? request.email);
   decideAccessRequest(db, requestId, 'approved');
-  return { plaintext, prefix, request };
+  return { request };
+}
+
+/**
+ * Operator fallback: mint a key for a user identified by email. For participants
+ * who never sign in via OAuth — the operator hands them the one-time plaintext.
+ * OAuth users mint their own keys at /account and never need this.
+ */
+export function issueKeyForEmail(
+  db: Database.Database,
+  email: string,
+  label?: string,
+): { plaintext: string; prefix: string } {
+  const userId = upsertUser(db, email);
+  const { plaintext, prefix } = issueApiKey(db, userId, label ?? email);
+  return { plaintext, prefix };
 }

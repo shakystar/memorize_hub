@@ -23,12 +23,20 @@ export interface GatewayConfig {
 
 /** The operator dashboard is enabled only when OAuth is fully configured. */
 export function adminEnabled(config: GatewayConfig): boolean {
+  return participantLoginEnabled(config) && config.adminLogins.length > 0;
+}
+
+/**
+ * Participant self-service login (/account) needs the same OAuth + session
+ * config as the operator dashboard, minus the operator allowlist — anyone with
+ * a GitHub account may sign in and request access.
+ */
+export function participantLoginEnabled(config: GatewayConfig): boolean {
   return Boolean(
     config.githubClientId &&
       config.githubClientSecret &&
       config.publicUrl &&
-      config.sessionSecret &&
-      config.adminLogins.length > 0,
+      config.sessionSecret,
   );
 }
 
