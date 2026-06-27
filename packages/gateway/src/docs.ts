@@ -7,7 +7,7 @@ import { htmlEscape, layout, originFor, GITHUB_URL } from './views.js';
  * the main memorize docs can be migrated here gradually — add a page by pushing
  * one entry to DOC_PAGES; the nav is generated from it. Content is hand-written
  * HTML (no markdown dep); `render(origin)` injects this Hub's real URL into
- * example commands. */
+ * example commands. The first page is the default for `/docs`. */
 
 interface DocPage {
   slug: string;
@@ -16,7 +16,64 @@ interface DocPage {
   render(origin: string): string;
 }
 
+const AGENT_GUIDE = `${GITHUB_URL}/blob/main/AGENT_GUIDE.md`;
+const AI_SETUP = `${GITHUB_URL}/blob/main/guides/AI_SETUP.md`;
+
 const DOC_PAGES: DocPage[] = [
+  {
+    slug: 'getting-started',
+    title: 'Getting started',
+    render: () => `
+<h1>Install &amp; set up memorize</h1>
+<p class="lead">memorize is installed per project — and it's built to be installed
+<em>by your AI assistant</em>, so you can skip the manual steps entirely.</p>
+
+<h2>The easy way (recommended)</h2>
+<p>Paste this one line into your Claude Code or Codex session. The assistant adds
+the package, binds the directory, installs the right hook for itself, offers to
+absorb your existing context, and verifies — no manual steps for you:</p>
+<pre><code>Follow this guide to set up memorize in this project:
+${AI_SETUP}</code></pre>
+<p class="muted">After that you use <code>claude</code> / <code>codex</code> exactly
+as before; project context arrives automatically when a session opens.</p>
+
+<h2>The manual way</h2>
+<p>Requires <strong>Node.js 22+</strong>. Always use the scoped name
+<code>@shakystar/memorize</code> with npx — the unscoped <code>memorize</code> on
+npm is an unrelated package.</p>
+
+<p><strong>1. Put memorize on PATH.</strong></p>
+<pre><code># Node project (has package.json) — install as a dev dependency:
+pnpm add -D @shakystar/memorize      # or: npm install -D @shakystar/memorize
+# pnpm workspace root: add -w. Non-Node project: install globally:
+npm install -g @shakystar/memorize</code></pre>
+
+<p><strong>2. Adopt the project</strong> — binds the current directory and imports
+any <code>AGENTS.md</code> / <code>CLAUDE.md</code> / <code>.cursorrules</code> as
+rules. Safe to re-run:</p>
+<pre><code>npx @shakystar/memorize project setup</code></pre>
+<p class="muted">Use <code>project setup</code>, not <code>project init</code> —
+init creates a bare project without importing your rules.</p>
+
+<p><strong>3. Install your agent integration</strong> — pick yours; both are
+re-runnable and preserve unrelated content:</p>
+<pre><code>npx @shakystar/memorize install claude    # Claude Code
+npx @shakystar/memorize install codex     # Codex</code></pre>
+<p class="muted"><strong>Codex only:</strong> start <code>codex</code>
+interactively once and accept the hook-approval prompt — until then codex records
+nothing from its sessions.</p>
+
+<p><strong>4. Verify</strong> — expect exit <code>0</code> and
+<code>"status": "ok"</code>; otherwise apply each issue's <code>fix</code> field
+in order and re-run:</p>
+<pre><code>npx @shakystar/memorize doctor --json</code></pre>
+
+<h2>Next</h2>
+<p><a href="/docs/connect">Sync this project across machines →</a> through the Hub.
+Install snags? <a href="/docs/troubleshooting">Troubleshooting →</a>. Full CLI
+reference: <a href="${AGENT_GUIDE}">AGENT_GUIDE</a>.</p>
+`.trim(),
+  },
   {
     slug: 'connect',
     title: 'Connect to the Hub',
@@ -24,9 +81,9 @@ const DOC_PAGES: DocPage[] = [
       const url = htmlEscape(origin);
       return `
 <h1>Connect a memorize client to this Hub</h1>
-<p class="lead">Sync a project's memory across machines through the Hub. You need
-a project-scoped API key first — <a href="/beta">request one</a>; an operator
-issues it manually.</p>
+<p class="lead">Once memorize is <a href="/docs/getting-started">set up</a>, sync a
+project's memory across machines through the Hub. You need a project-scoped API
+key first — <a href="/beta">request one</a>; an operator issues it manually.</p>
 
 <h2>1. Push from your origin machine</h2>
 <p>On the machine that already has the project, push its events to the Hub:</p>
@@ -46,11 +103,53 @@ work boundaries. Sync is <strong>asynchronous</strong> (poll-on-boundary): the
 origin can be offline when another machine pulls. Dedup is by event id, so
 re-pushing is safe.</p>
 
-<p class="muted">The key is scoped to the project you were granted — other
-projects return <code>403</code>. The full memorize CLI reference lives on
-<a href="${GITHUB_URL}">GitHub</a>.</p>
+<p class="muted">The key is scoped to the project you were granted — other projects
+return <code>403</code>. The full CLI reference lives in the
+<a href="${AGENT_GUIDE}">AGENT_GUIDE</a>.</p>
 `.trim();
     },
+  },
+  {
+    slug: 'troubleshooting',
+    title: 'Troubleshooting',
+    render: () => `
+<h1>Troubleshooting the install</h1>
+<p class="lead">Diagnose in this order — each failure mode is distinct and the
+order avoids chasing symptoms. The fastest catch-all is
+<code>npx @shakystar/memorize doctor --json</code>.</p>
+
+<h2>1. Node present and 22+?</h2>
+<pre><code>node -v</code></pre>
+<p>If missing or old, install from <a href="https://nodejs.org">nodejs.org</a> —
+don't work around it.</p>
+
+<h2>2. <code>EACCES</code> on <code>npm install -g</code>?</h2>
+<p>The global npm dir is root-owned on many systems. Never sudo — use a user-owned
+prefix:</p>
+<pre><code>mkdir -p ~/.npm-global &amp;&amp; npm config set prefix ~/.npm-global
+# then add to your shell profile and re-open the terminal:
+export PATH="$HOME/.npm-global/bin:$PATH"</code></pre>
+
+<h2>3. Binary not resolvable?</h2>
+<pre><code>command -v memorize        # where.exe memorize on Windows</code></pre>
+<p>After a global install the current shell may not see the new PATH — open a new
+terminal. On Windows, confirm <code>npm prefix -g</code> is on PATH.</p>
+
+<h2>4. WSL shadowing</h2>
+<p>Inside WSL, <code>which memorize</code> returning a <code>/mnt/c/…</code> path
+means the Windows install is leaking through PATH. Install inside WSL and ensure
+the Linux npm bin dir precedes <code>/mnt/c</code> entries in PATH.</p>
+
+<h2>5. Installed but unhealthy?</h2>
+<pre><code>npx @shakystar/memorize doctor --json</code></pre>
+<p>Apply each issue's <code>fix</code> field in order until status is
+<code>ok</code>. Hooks load at session start, so start a <strong>new</strong>
+agent session to see injected context.</p>
+
+<p class="muted">Still stuck? Gather <code>node -v</code>, <code>npm -v</code>,
+<code>npm prefix -g</code>, your OS/shell, the full error, and the doctor JSON,
+then <a href="${GITHUB_URL}/issues">open an issue</a>.</p>
+`.trim(),
   },
 ];
 

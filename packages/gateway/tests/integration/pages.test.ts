@@ -74,10 +74,20 @@ describe('public pages: landing + docs + beta', () => {
     expect(html).toContain('<form method="POST" action="/beta/requests"');
   });
 
-  it('serves the connect docs with the real Hub URL injected', async () => {
+  it('serves getting-started as the default /docs page', async () => {
     const res = await fetch(`${base}/docs`);
     expect(res.status).toBe(200);
     const html = await res.text();
+    expect(html).toContain('Install');
+    expect(html).toContain('project setup');
+    expect(html).toContain('install claude');
+  });
+
+  it('serves the connect page by slug with the real Hub URL injected', async () => {
+    const res = await fetch(`${base}/docs/connect`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Connect a memorize client');
     expect(html).toContain('project clone');
     expect(html).toContain('--remote-url');
     expect(html).toContain('--token');
@@ -85,10 +95,10 @@ describe('public pages: landing + docs + beta', () => {
     expect(html).toContain(PUBLIC_URL);
   });
 
-  it('resolves a docs page by slug', async () => {
-    const res = await fetch(`${base}/docs/connect`);
+  it('serves the troubleshooting page by slug', async () => {
+    const res = await fetch(`${base}/docs/troubleshooting`);
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain('Connect a memorize client');
+    expect(await res.text()).toContain('doctor');
   });
 
   it('returns 404 for an unknown docs slug', async () => {
