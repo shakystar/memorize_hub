@@ -1,4 +1,4 @@
-# memorize_hub — Agent Guide
+# memorize_hub - Agent Guide
 
 ## What this is
 
@@ -8,10 +8,10 @@ holds opaque per-project event logs so machines that do **not** share a
 filesystem can auto-sync over the network.
 
 It is the network sibling of memorize's `file` transport (a shared cloud-sync
-folder). Same model — origin pushes, relay holds, replica pulls later — just
+folder). Same model - origin pushes, relay holds, replica pulls later - just
 over HTTP instead of a shared directory.
 
-**Read [`PROTOCOL.md`](./PROTOCOL.md) first** — it is the authoritative wire
+**Read [`PROTOCOL.md`](./PROTOCOL.md) first** - it is the authoritative wire
 contract this server implements and the memorize client speaks. Do not change
 the wire shape here unilaterally; it is shared with the memorize repo.
 
@@ -23,19 +23,19 @@ the wire shape here unilaterally; it is shared with the memorize repo.
   with no configured relay never talks to this server. Nothing here may become
   a hard dependency of memorize.
 - The convergence/projection/CRDT logic lives entirely in memorize clients. The
-  relay does **none** of it — it only stores and forwards opaque events.
+  relay does **none** of it - it only stores and forwards opaque events.
 
 ## Design direction (decided 2026-06-08)
 
-- **Runtime:** Node `node:http` — **zero runtime dependencies**, vendor-neutral.
+- **Runtime:** Node `node:http` - **zero runtime dependencies**, vendor-neutral.
   Mirror memorize's no-framework, std-lib-first style (it uses better-sqlite3 +
   plain node, no express/fastify).
 - **Storage:** **ndjson on disk**, one append-only file per project
-  (`<store>/<projectId>/events.ndjson`) — same layout memorize's file transport
+  (`<store>/<projectId>/events.ndjson`) - same layout memorize's file transport
   uses. Durable across restarts, dedup by id on append, trivial to inspect.
   (An in-memory map is fine for the very first spike, but ship ndjson.)
   On boot, rebuild each project's dedup index (seen-id `Set`) by scanning its
-  `events.ndjson` — the file is the only durable state.
+  `events.ndjson` - the file is the only durable state.
 - **Auth:** **optional bearer token** via env (e.g. `MEMORIZE_RELAY_TOKEN`).
   Unset = open (localhost/trusted dev). Set = `401` gate on every route.
 - **Concurrency:** serialize appends per project (file lock or per-project async
@@ -47,20 +47,20 @@ Distilled from the post-v1 design conversation (cross-repo position lives in
 this repo's discussions; follow-up to memorize#92 "write at the edge, read
 everywhere"). Binding on future work here:
 
-> **Update (2026-06-26) — Hub umbrella monorepo.** The repo is now a pnpm
+> **Update (2026-06-26) - Hub umbrella monorepo.** The repo is now a pnpm
 > monorepo: `packages/relay` (this transport layer, kept byte-for-byte and
 > isolated) + `packages/gateway` (a new control-plane). The bullets below still
 > bind, with one clarification: "not in the relay" means **not in the relay
 > *package***, not "not in this repo." The gateway is the home for the auth
-> ladder's later rungs (project-scoped API keys — built), OAuth/identity, the
+> ladder's later rungs (project-scoped API keys - built), OAuth/identity, the
 > beta access-request page (built), TLS-terminating public edge, and the
 > users/tokens/ACL DB (built, better-sqlite3, no event data). It calls the relay
-> as a separate process over HTTP with the internal token — never importing
+> as a separate process over HTTP with the internal token - never importing
 > `EventStore`. The relay package stays zero-dep, opaque, and transport-only.
 
 - **Transport layer only.** This repo is the Hub's *transport layer*. The #92
   read surface (remote MCP endpoint, dashboards, multi-user identity) will be
-  a separate **headless memorize replica that consumes this relay** — never
+  a separate **headless memorize replica that consumes this relay** - never
   grow projection, query, or MCP features here. The relay must never learn the
   memory taxonomy (short-term observations vs consolidated memories are just
   opaque lines); that is what lets the client schema evolve without touching
@@ -69,19 +69,19 @@ everywhere"). Binding on future work here:
   identity; deploy-key model). Step 2, triggered by the first second person
   sharing a relay: per-project token scoping. OAuth/identity belongs to the
   headless replica's MCP endpoint (trigger: the first claude.ai consumer) and
-  is **never built into the relay** — the replica authenticates users and
+  is **never built into the relay** - the replica authenticates users and
   holds the relay token internally. TLS termination also stays outside
   (reverse proxy); the relay speaks plain HTTP.
 - **Crash consistency is a shared contract, not a relay feature.** Hydration
   skips a torn final ndjson line; the client's push watermark advances only on
   a 200, so a lost tail is re-pushed at the next boundary and dedup absorbs
-  it. This loop — not fsync — is why the relay claims no-data-loss. Do not
+  it. This loop - not fsync - is why the relay claims no-data-loss. Do not
   "fix" the torn-line skip into an error.
 - **Data plane = per-project files; control plane = small shared DB (future,
   not here).** Per-project ndjson keeps concurrent pushes contention-free
   across projects and makes ops file-grained (backup/clone/delete/retention =
   file ops). A single shared table would couple unrelated projects' write
-  locks and index growth for zero benefit — memorize has no cross-project
+  locks and index growth for zero benefit - memorize has no cross-project
   queries by design. If the read surface ever needs a shared DB, it holds
   only users/tokens/ACL, never event data.
 - **Project/event id alignment across machines is already solved client-side**
@@ -89,8 +89,8 @@ everywhere"). Binding on future work here:
   `project clone`, event ids are minted once globally-unique. The relay keys
   by path id and needs no mapping layer.
 - **Scale path for the store, when needed (not before):** lazy per-project
-  hydration instead of boot scan → seen-id Set + file-offset index with
-  streamed pulls → retention/compaction (roadmap). Never a DB migration.
+  hydration instead of boot scan -> seen-id Set + file-offset index with
+  streamed pulls -> retention/compaction (roadmap). Never a DB migration.
 
 ## Configuration (env)
 
@@ -99,38 +99,38 @@ everywhere"). Binding on future work here:
 | `MEMORIZE_RELAY_PORT` | `8787` | listen port |
 | `MEMORIZE_RELAY_STORE` | `./data` | root dir for `<store>/<projectId>/events.ndjson` |
 | `MEMORIZE_RELAY_TOKEN` | unset | bearer token; unset = open (localhost/trusted dev) |
-| `MEMORIZE_RELAY_MAX_BODY` | `10485760` (10 MiB) | request body cap; over → `413` |
+| `MEMORIZE_RELAY_MAX_BODY` | `10485760` (10 MiB) | request body cap; over -> `413` |
 
 ## Scaffolding (mirror memorize)
 
 TypeScript ESM (`"type": "module"`), Node >= 22, pnpm, `tsc` build / `tsx` dev /
-`vitest` tests / `eslint` + typescript-eslint — the same toolchain as
+`vitest` tests / `eslint` + typescript-eslint - the same toolchain as
 `../memorize`. "Zero runtime dependencies" still stands; dev-dependencies are
 fine.
 
-## Invariants (non-negotiable — see PROTOCOL.md §"Invariants")
+## Invariants (non-negotiable - see PROTOCOL.md §"Invariants")
 
-1. Append-only — never mutate/drop a stored event.
-2. Order-preserving — pull returns insertion order.
-3. Idempotent — dedup by `event.id` on write; re-pull is safe.
-4. Opaque payloads — depend on nothing but `event.id`.
+1. Append-only - never mutate/drop a stored event.
+2. Order-preserving - pull returns insertion order.
+3. Idempotent - dedup by `event.id` on write; re-pull is safe.
+4. Opaque payloads - depend on nothing but `event.id`.
 
 ## Roadmap
 
-- **v1** — `node:http` server, ndjson-on-disk store-and-forward, optional bearer
+- **v1** - `node:http` server, ndjson-on-disk store-and-forward, optional bearer
   token, `POST/GET /v1/projects/:id/events` + `/healthz`. Implements PROTOCOL.md.
-- **gateway v0** (2026-06-26, `packages/gateway`) — control-plane: control-plane
+- **gateway v0** (2026-06-26, `packages/gateway`) - control-plane: control-plane
   DB (users/tokens/ACL), **project-scoped API keys** (per-project token scoping,
   done in the gateway not the relay), ACL reverse proxy that injects the relay's
   internal token, public **beta access-request page** + `hub-gateway-admin`
   manual-approval CLI, and a two-replica async-convergence e2e through the gateway.
-- **M4** — operator **OAuth login + dashboard** in the gateway (browser approval
+- **M4** - operator **OAuth login + dashboard** in the gateway (browser approval
   UI over the same access-requests). Open decision: OAuth provider.
-- **M5** — **public deploy**: gateway (public, TLS-terminated) + relay
+- **M5** - **public deploy**: gateway (public, TLS-terminated) + relay
   (internal-only) Docker/compose, public domain, onboard the first beta
   participant, measure real cross-device async convergence. Open decision:
   deploy target.
-- **Later** — retention/compaction policy, and a **realtime push channel**
+- **Later** - retention/compaction policy, and a **realtime push channel**
   (SSE/websocket) for memorize P3-c (cross-machine live watermark deltas, not
   just poll-on-boundary).
 

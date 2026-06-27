@@ -1,4 +1,4 @@
-# memorize_hub — Wire Protocol (v1)
+# memorize_hub - Wire Protocol (v1)
 
 > **Authoritative source of truth** for the HTTP sync contract shared by the
 > `memorize` client (`src/adapters/sync-transport-http.ts`) and this relay
@@ -11,7 +11,7 @@ sync. It is a **dumb store-and-forward** queue of opaque events per project:
 
 - The origin machine **pushes** new events.
 - The relay **holds** them (durably).
-- A replica machine **pulls** later — even if the origin is offline.
+- A replica machine **pulls** later - even if the origin is offline.
 
 The relay never parses, validates, projects, or interprets event payloads. It
 preserves insertion order and dedups by event id. All convergence/projection
@@ -24,21 +24,21 @@ deduped by id). This keeps the relay vendor-independent and trivially correct.
 - Base URL is configured client-side (e.g. `https://hub.example.com`). All
   routes below are relative to it.
 - **Auth (optional bearer token):** if the relay is started with a token, every
-  route requires `Authorization: Bearer <token>`; mismatched/missing → `401`.
-  No token configured → open (localhost/trusted-network dev). Local-first: the
+  route requires `Authorization: Bearer <token>`; mismatched/missing -> `401`.
+  No token configured -> open (localhost/trusted-network dev). Local-first: the
   relay is always optional; clients without a configured relay never call it.
 
 ## Endpoints
 
 **`:projectId` validation:** the path id MUST match `^[A-Za-z0-9_-]{1,128}$`.
-Anything else → `400`, before touching storage. (The id becomes a filesystem
+Anything else -> `400`, before touching storage. (The id becomes a filesystem
 path component on the relay, so this also closes path traversal; memorize ids
-like `proj_…` already conform.)
+like `proj_...` already conform.)
 
 ### `POST /v1/projects/:projectId/events`
 
 Append events for `:projectId`. `:projectId` is the memorize **replica id**
-(same id on every machine — true-replica, memorize #30).
+(same id on every machine - true-replica, memorize #30).
 
 Request body = memorize `SyncPushRequest`:
 
@@ -53,7 +53,7 @@ Request body = memorize `SyncPushRequest`:
 
 Behavior: for each event, if `event.id` is already stored for this project,
 **skip it** (idempotent dedup); otherwise append in array order. Clients may
-re-push overlapping ranges (stale watermark, concurrent pushes) — dedup makes
+re-push overlapping ranges (stale watermark, concurrent pushes) - dedup makes
 this safe.
 
 Response `200` = `SyncPushResponse`:
@@ -76,12 +76,12 @@ Response `200` = `SyncPushResponse`:
 
 Return events stored after `:eventId`, in insertion order.
 
-- No `since` → return **all** events for the project.
-- `since` present but **not found** (e.g. compacted/never-stored) → return
+- No `since` -> return **all** events for the project.
+- `since` present but **not found** (e.g. compacted/never-stored) -> return
   **all** events. (Mirrors the memorize file adapter's `findIndex(-1)+1 =
   slice(0)`; the client dedups via local `INSERT OR IGNORE`, so over-returning
   is always safe, under-returning is not.)
-- `since` found → return everything strictly after it.
+- `since` found -> return everything strictly after it.
 
 Response `200` = `SyncPullResponse`:
 
@@ -110,7 +110,7 @@ token holder can verify both reachability and credentials in one call.)
 
 Any non-2xx makes the memorize client throw; its never-throw auto-sync gate
 degrades that to a deferred no-op and retries at the next boundary. So transient
-relay outages are invisible and self-healing — never data loss (events stay in
+relay outages are invisible and self-healing - never data loss (events stay in
 the local append-only log until a push succeeds).
 
 ## Invariants the relay MUST uphold
@@ -123,5 +123,5 @@ the local append-only log until a push succeeds).
 
 ## Non-goals (v1)
 
-Conflict resolution, projection, HLC tie-break, semantic search — all live in
+Conflict resolution, projection, HLC tie-break, semantic search - all live in
 memorize clients, not the relay. The relay is intentionally dumb.
