@@ -15,3 +15,6 @@ data
 .memorize
 .claude
 *.tsbuildinfo
+
+# Dev-only convergence/latency harness — not part of the Hub image.
+sandbox
