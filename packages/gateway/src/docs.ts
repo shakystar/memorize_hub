@@ -540,6 +540,51 @@ from-scratch replay. Every constant here is a tuning parameter, set from the
 2026-06-08 design and meant to be adjusted against real transcripts.</p>
 `.trim(),
   },
+  {
+    slug: 'performance',
+    title: 'Performance',
+    section: 'Evidence',
+    render: () => `
+<h1>Performance</h1>
+<p class="lead">memorize's retrieval is scored on a public benchmark. The strong,
+above-90% numbers are shown below; everything else is noted as a one-line milestone
+with a link to the full data. Numbers shown are measured and reproducible, not
+estimates.</p>
+
+<h2>Retrieval benchmark (LongMemEval-S)</h2>
+<p>LongMemEval-S is a public 500-question memory benchmark: each question hides its
+answer in one of about fifty past sessions, and memorize is scored on whether the
+right session comes back. Recall, the share of questions whose correct session lands
+in the top k, is above 90% across the board:</p>
+<pre><code>mode                    recall@5  recall@10  recall@20
+lexical (BM25)            0.966     0.986      0.994
+hybrid (BM25 + bge-m3)    0.978     0.994      1.000</code></pre>
+<p>Lexical search alone puts the right session in the top five for about 97% of
+questions; adding semantic search (bge-m3) lifts the harder, paraphrased cases to a
+perfect top-20. These are search-layer recall scores, not answer accuracy. Reproduce
+with <code>pnpm benchmark:retrieval bm25</code>; the full method and the
+ranking-quality metrics are in the
+<a href="${GITHUB_URL}/discussions/176">benchmark discussion</a>.</p>
+
+<h2>Milestones</h2>
+<ul>
+ <li>Ranking quality (ndcg, mrr) is strong and improves with semantic search; the
+ figures are in the <a href="${GITHUB_URL}/discussions/176">benchmark discussion</a>.</li>
+ <li>Dogfooded hands-off on a real project for several days, with capture,
+ consolidation, replacement, and injection all running with no human in the loop
+ (<a href="${GITHUB_URL}/discussions/98">dogfooding report</a>).</li>
+ <li>Cross-machine async convergence verified through this Hub: two isolated machines
+ converged on the full event set in both directions
+ (<a href="https://github.com/shakystar/memorize_hub/blob/main/sandbox/RESULTS.md">sandbox results</a>).
+ Sync latency is a client concern tracked as memorize #185, not a Hub bottleneck.</li>
+</ul>
+
+<h2>Honest limits</h2>
+<p>These are early results. The benchmark scores the search layer, not the
+consolidation above it, and dogfooding is a short run, so behavior at hundreds of
+memories over months is not proven yet.</p>
+`.trim(),
+  },
 ];
 
 /** Left sidebar nav generated from the page registry, grouped by section. */
