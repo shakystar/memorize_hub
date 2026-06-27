@@ -21,6 +21,40 @@ const AI_SETUP = `${GITHUB_URL}/blob/main/guides/AI_SETUP.md`;
 
 const DOC_PAGES: DocPage[] = [
   {
+    slug: 'overview',
+    title: 'Overview',
+    render: () => `
+<h1>What is memorize?</h1>
+<p class="lead">One persistent project brain shared between you, Claude Code, and
+Codex — local-first, event-sourced, and modeled on how human memory works. No
+server required, no API key.</p>
+<p>Your agent forgets everything when a session ends: what it was doing, what it
+decided and why, where it stopped. memorize watches the agent work, distills what
+mattered into long-term memory, and feeds the right memories back when the next
+session opens — for every agent on the project, across machines.</p>
+
+<h2>Why</h2>
+<ul>
+ <li><strong>Sessions die.</strong> Next session you re-explain what you were doing and why.</li>
+ <li><strong>Switching agents starts over.</strong> Claude and Codex each keep their own notes.</li>
+ <li><strong>Two machines = half a brain in each.</strong> Desktop context doesn't follow you to the laptop.</li>
+</ul>
+
+<h2>How it works</h2>
+<ol class="steps">
+ <li><strong>Capture</strong> — hooks record cheap, rule-filtered observations (file writes, decisions, task transitions). No LLM, no latency.</li>
+ <li><strong>Consolidate</strong> — at session boundaries a background process distills observations into long-term memory, scored by salience. It runs through your existing <code>claude</code> / <code>codex</code> login — no API key.</li>
+ <li><strong>Retrieve</strong> — next session, memories compete for a context budget by salience × recency × relevance. Forgetting happens at retrieval time; nothing is ever deleted.</li>
+ <li><strong>Share</strong> — parallel sessions see each other live; the same event log syncs across machines and converges deterministically.</li>
+</ol>
+
+<p><a class="btn" href="/docs/getting-started">Get started →</a></p>
+<p class="muted">Cross-machine sync runs through this Hub — see
+<a href="/docs/connect">Connect</a>. The deeper design lives in
+<a href="${GITHUB_URL}/blob/main/docs/ARCHITECTURE.md">ARCHITECTURE</a>.</p>
+`.trim(),
+  },
+  {
     slug: 'getting-started',
     title: 'Getting started',
     render: () => `
