@@ -15,8 +15,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm -r build
-# Drop dev dependencies; keep better-sqlite3 (a prod dep of the gateway).
-RUN pnpm -r --prod prune || pnpm prune --prod
+# Note: no dev-dep prune. `pnpm prune --prod` at a workspace root strips the
+# virtual store to the (empty) root deps, breaking the gateway's better-sqlite3
+# symlink. The full tree is shipped instead — correct, slightly larger.
 
 # ---- runtime ----
 FROM node:24-bookworm-slim AS runtime
