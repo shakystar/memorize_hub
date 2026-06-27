@@ -5,6 +5,8 @@ import type Database from 'better-sqlite3';
 import { handleBetaPage, handleBetaSubmit } from './beta.js';
 import type { GatewayConfig } from './config.js';
 import { handleAdmin } from './dashboard.js';
+import { handleDocs } from './docs.js';
+import { handleLanding } from './landing.js';
 import { handleEventsProxy, sendJson, type ProxyContext } from './proxy.js';
 
 const EVENTS_ROUTE = /^\/v1\/projects\/([^/]+)\/events$/;
@@ -32,8 +34,20 @@ export function createGatewayServer(options: GatewayServerOptions): Server {
           return;
         }
 
+        // Public landing page.
+        if (req.method === 'GET' && url.pathname === '/') {
+          handleLanding(req, res, ctx);
+          return;
+        }
+
+        // Public docs surface.
+        if (req.method === 'GET' && (url.pathname === '/docs' || url.pathname.startsWith('/docs/'))) {
+          handleDocs(req, res, ctx, url);
+          return;
+        }
+
         // Public beta access-request surface (no auth; manual approval).
-        if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/beta')) {
+        if (req.method === 'GET' && url.pathname === '/beta') {
           handleBetaPage(res);
           return;
         }
