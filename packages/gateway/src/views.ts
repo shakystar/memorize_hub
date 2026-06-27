@@ -37,7 +37,8 @@ pre code{background:none;padding:0}
 ol.steps{padding-left:1.2rem}ol.steps li{margin:.4rem 0}
 .docs-wrap{display:grid;grid-template-columns:13rem 1fr;gap:2.5rem;align-items:start}
 .docs-side{position:sticky;top:1.5rem}
-.docs-side .label{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:#888;margin:0 0 .5rem .5rem}
+.docs-side .label{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:#888;margin:1.1rem 0 .4rem .5rem}
+.docs-side .label:first-child{margin-top:0}
 .docs-side ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.1rem}
 .docs-side a{display:block;padding:.3rem .55rem;border-radius:6px;font-size:.95rem;color:inherit}
 .docs-side a:hover{background:rgba(127,127,127,.12);text-decoration:none}

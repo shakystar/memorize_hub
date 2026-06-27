@@ -12,6 +12,8 @@ import { htmlEscape, layout, originFor, GITHUB_URL } from './views.js';
 interface DocPage {
   slug: string;
   title: string;
+  /** Sidebar group label; defaults to 'Guides'. */
+  section?: string;
   /** `origin` is this Hub's public base URL, e.g. https://...fly.dev */
   render(origin: string): string;
 }
@@ -237,15 +239,113 @@ agent session to see injected context.</p>
 then <a href="${GITHUB_URL}/issues">open an issue</a>.</p>
 `.trim(),
   },
+  {
+    slug: 'event-sourcing',
+    title: 'Event sourcing core',
+    section: 'Internals',
+    render: () => `
+<h1>Event sourcing core</h1>
+<p class="lead">memorize records every change as an immutable event in an
+append-only log. That log is the single source of truth; everything you read back
+(tasks, memories, rules) is a projection derived from it. This page describes how
+the core works, at the level of the actual implementation in memorize 2.x.</p>
+
+<h2>The event</h2>
+<p>Every change is one row in an <code>events</code> table. An event carries an
+identity, an ordering key, a type, the scope it touches, who produced it, and a
+JSON payload:</p>
+<pre><code>events(
+  seq         INTEGER PRIMARY KEY,  -- replay order, assigned by SQLite
+  id          TEXT UNIQUE,          -- global id, the idempotency key
+  type        TEXT,                 -- e.g. task.created, memory.consolidated
+  project_id  TEXT,
+  scope_type  TEXT, scope_id TEXT,  -- policy | project | workstream | task | session
+  actor       TEXT,
+  created_at  TEXT, updated_at TEXT,
+  payload     TEXT                  -- JSON
+)</code></pre>
+<p>Ids look like <code>evt_&lt;base36-time&gt;_&lt;random&gt;</code> and are minted
+once, globally. Two columns do two different jobs: <code>seq</code> is a local
+auto-increment that fixes replay order on this machine, and <code>id</code> is the
+stable global identity used for deduplication and for sync watermarks.</p>
+
+<h2>Storage</h2>
+<p>The store is SQLite through better-sqlite3, one database file per project. It
+runs in WAL mode with a 5 second busy timeout, so a reader and a writer do not
+block each other and a brief lock is retried instead of failing. Schema changes are
+an ordered, append-only list of migrations gated by SQLite's
+<code>user_version</code>: on open, memorize runs every migration whose index is at
+or above the stored version inside one <code>BEGIN IMMEDIATE</code> transaction,
+then bumps the version. A second process opening the same fresh database blocks on
+the lock, reads the already-bumped version, and applies nothing.</p>
+
+<h2>Append and idempotency</h2>
+<p>Writes are append-only: an event is inserted, never updated or deleted in place.
+A locally produced event gets the next <code>seq</code>. Events arriving from
+another machine are inserted with <code>INSERT OR IGNORE</code>, so a row whose
+<code>id</code> already exists is skipped. That one property makes re-delivery safe:
+pulling the same range twice inserts each event at most once.</p>
+<p>Reads always come back in <code>seq</code> order. A pull since a watermark
+resolves the watermark event's <code>seq</code> and returns everything with a
+greater <code>seq</code>; an unknown watermark falls back to returning everything,
+so a lost bookmark over-delivers rather than under-delivers.</p>
+
+<h2>Projections</h2>
+<p>You never read the raw log to answer a question. A single reducer,
+<code>reduceProjectState</code>, folds the ordered events into state, and a rebuild
+wipes and repopulates the projection tables (tasks, decisions, rules, memories, and
+so on) in one transaction. Because the reducer is the only writer of those tables
+and the rebuild is all-or-nothing, the projection stays a pure function of the log.
+Run it twice and you get the same tables; crash halfway and the old tables stay
+intact until the next rebuild succeeds.</p>
+
+<h2>Invalidate, do not delete</h2>
+<p>Superseding a memory or a decision does not remove the old row. The reducer
+stamps it with an <code>invalidAt</code> timestamp and a pointer to what replaced
+it, then leaves it in place, so a point-in-time replay still shows what was true
+then. The same pattern collapses duplicate consolidations: when two machines
+distill the same observations into the same memory, the reducer keeps the one with
+the smaller <code>(created_at, id)</code> and marks the rest invalid. Every machine
+picks the same winner, so the result converges with no coordination.</p>
+
+<h2>Crash consistency</h2>
+<p>Applying a pull is ordered on purpose: insert the events
+(<code>INSERT OR IGNORE</code>), rebuild the projection, then advance the watermark
+last. If the process dies before the watermark advances, the bookmark is stale, so
+the next pull requests the same range again; the duplicate inserts are ignored and
+the idempotent rebuild repeats harmlessly. No fsync dance and no torn-line parsing
+are needed, because each batch is one SQLite transaction and the log is
+append-only.</p>
+
+<h2>Why it is built this way</h2>
+<p>An append-only log plus an idempotent, deterministic projection gives eventual
+consistency across machines with no server, no locks, and no distributed clock.
+Re-delivery is safe, replay is deterministic, and history is never lost. The next
+Internals pages cover how this log syncs between machines and how memories are
+ranked at retrieval time.</p>
+`.trim(),
+  },
 ];
 
-/** Left sidebar nav generated from the page registry. */
+/** Left sidebar nav generated from the page registry, grouped by section. */
 function docsSide(currentSlug: string): string {
-  const items = DOC_PAGES.map((p) => {
-    const current = p.slug === currentSlug ? ' aria-current="page"' : '';
-    return `<li><a href="/docs/${p.slug}"${current}>${htmlEscape(p.title)}</a></li>`;
-  }).join('');
-  return `<nav class="docs-side"><p class="label">Documentation</p><ul>${items}</ul></nav>`;
+  const groups = new Map<string, DocPage[]>();
+  for (const page of DOC_PAGES) {
+    const section = page.section ?? 'Guides';
+    (groups.get(section) ?? groups.set(section, []).get(section)!).push(page);
+  }
+  const sections = [...groups.entries()]
+    .map(([section, pages]) => {
+      const items = pages
+        .map((p) => {
+          const current = p.slug === currentSlug ? ' aria-current="page"' : '';
+          return `<li><a href="/docs/${p.slug}"${current}>${htmlEscape(p.title)}</a></li>`;
+        })
+        .join('');
+      return `<p class="label">${htmlEscape(section)}</p><ul>${items}</ul>`;
+    })
+    .join('');
+  return `<nav class="docs-side">${sections}</nav>`;
 }
 
 /** Two-column docs shell: sidebar + content. */
