@@ -140,6 +140,22 @@ describe('public pages: landing + docs + beta', () => {
     expect(html).toContain('sync.state.updated');
   });
 
+  it('serves the projection-rebuild internals page', async () => {
+    const res = await fetch(`${base}/docs/projection-rebuild`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Projection and rebuild');
+    expect(html).toContain('rebuildProjectProjection');
+  });
+
+  it('serves the memory-retrieval internals page', async () => {
+    const res = await fetch(`${base}/docs/memory-retrieval`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Memory model and retrieval');
+    expect(html).toContain('retrieveMemoryContext');
+  });
+
   it('groups the sidebar into sections', async () => {
     const html = await (await fetch(`${base}/docs`)).text();
     expect(html).toContain('>Guides<');
