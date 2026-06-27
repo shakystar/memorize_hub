@@ -156,6 +156,18 @@ describe('public pages: landing + docs + beta', () => {
     expect(html).toContain('retrieveMemoryContext');
   });
 
+  it('serves the performance evidence page under an Evidence section', async () => {
+    const res = await fetch(`${base}/docs/performance`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('LongMemEval-S');
+    expect(html).toContain('recall@5');
+    // Only the strong (>= 90%) numbers are exposed; ranking metrics stay qualitative.
+    expect(html).not.toContain('0.896');
+    const index = await (await fetch(`${base}/docs`)).text();
+    expect(index).toContain('>Evidence<');
+  });
+
   it('groups the sidebar into sections', async () => {
     const html = await (await fetch(`${base}/docs`)).text();
     expect(html).toContain('>Guides<');
