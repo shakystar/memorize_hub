@@ -91,10 +91,14 @@ fly apps create <your-app-name>          # then set `app = "<your-app-name>"` in
 fly volumes create hub_data --size 1 --region nrt   # durable /data (match primary_region)
 ```
 
-### 2. GitHub OAuth app (operator dashboard)
+### 2. GitHub OAuth app (operator dashboard + participant /account)
 Create one at https://github.com/settings/developers -> **New OAuth App**:
 - **Homepage URL:** `https://<your-app-name>.fly.dev`
-- **Authorization callback URL:** `https://<your-app-name>.fly.dev/admin/callback`
+- **Authorization callback URL:** `https://<your-app-name>.fly.dev/oauth/callback`
+
+One app backs both flows: the operator dashboard (`/admin`) and participant
+self-service (`/account`) share this single callback. Register this exact URL —
+it is an exact match, not a sub-directory, so no widening is needed.
 
 Copy the Client ID and generate a Client secret.
 

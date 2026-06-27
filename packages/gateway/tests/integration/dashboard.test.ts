@@ -126,8 +126,8 @@ describe('operator dashboard', () => {
     expect(String(res.headers['set-cookie'])).toContain('hub_oauth_state=');
   });
 
-  it('rejects a callback with a bad state (CSRF guard)', async () => {
-    const res = await req(base, '/admin/callback?code=x&state=forged');
+  it('rejects a shared-callback request with a bad state (CSRF guard)', async () => {
+    const res = await req(base, '/oauth/callback?code=x&state=forged');
     expect(res.status).toBe(403);
   });
 
