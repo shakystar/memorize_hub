@@ -25,3 +25,22 @@ jobs:
       # typecheck + lint + test across packages/relay and packages/gateway.
       # (e2e scripts are excluded — they need the sibling memorize CLI built.)
       - run: pnpm -r check
+
+  # Continuous deploy: only after `check` passes on a push to main. PRs run
+  # `check` but never this job. Needs a FLY_API_TOKEN repo secret
+  # (`fly tokens create deploy` → `gh secret set FLY_API_TOKEN`). App name +
+  # config come from fly.toml; --remote-only builds on Fly's builder (no Docker
+  # in the runner).
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: fly-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
