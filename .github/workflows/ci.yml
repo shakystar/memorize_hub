@@ -26,6 +26,17 @@ jobs:
       # (e2e scripts are excluded — they need the sibling memorize CLI built.)
       - run: pnpm -r check
 
+  # Verify the deploy image actually builds on PRs (the runtime that ships to
+  # Fly), catching Dockerfile/build regressions — e.g. a bad prune or COPY —
+  # before merge, not at deploy time.
+  docker-build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the Hub image
+        run: docker build -t memorize-hub:ci .
+
   # Continuous deploy: only after `check` passes on a push to main. PRs run
   # `check` but never this job. Needs a FLY_API_TOKEN repo secret
   # (`fly tokens create deploy` → `gh secret set FLY_API_TOKEN`). App name +
@@ -44,3 +55,20 @@ jobs:
       - run: flyctl deploy --remote-only --ha=false
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      # Confirm the deploy actually produced a working site (a green deploy can
+      # still ship a broken boot). Wake the machine, then assert 200s.
+      - name: Smoke test the live site
+        run: |
+          set -euo pipefail
+          base="https://memorize-hub-shakystar.fly.dev"
+          for i in $(seq 1 20); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$base/healthz" || true)
+            [ "$code" = "200" ] && { echo "healthz ok"; break; }
+            echo "waiting for healthz ($i): $code"; sleep 3
+          done
+          for path in /healthz / /docs /beta; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$base$path")
+            echo "$path -> $code"
+            [ "$code" = "200" ]
+          done
