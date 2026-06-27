@@ -3,7 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import type { GatewayConfig } from './config.js';
 
 /** Shared HTML shell + helpers for the Hub's public pages (landing, beta, docs).
- * Zero-dependency, hand-written HTML — matches the gateway's std-lib style. */
+ * Zero-dependency, hand-written HTML - matches the gateway's std-lib style. */
 
 const STYLE = `
 :root{color-scheme:light dark}
@@ -14,6 +14,7 @@ a{color:#2563eb;text-decoration:none}
 @media(prefers-color-scheme:dark){a{color:#6ea8fe}}
 a:hover{text-decoration:underline}
 header.site,main,footer.site{max-width:48rem;margin:0 auto;padding-left:1.25rem;padding-right:1.25rem}
+body.wide header.site,body.wide main,body.wide footer.site{max-width:60rem}
 header.site{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding-top:1.1rem;padding-bottom:1.1rem;border-bottom:1px solid #e5e5e5}
 @media(prefers-color-scheme:dark){header.site{border-color:#2a2a2a}}
 header.site .brand{font-weight:700;color:inherit;font-size:1.05rem}
@@ -34,9 +35,21 @@ pre{background:#f6f6f6;padding:.9rem 1rem;border-radius:8px;overflow-x:auto;font
 @media(prefers-color-scheme:dark){pre{background:#1e1e1e}}
 pre code{background:none;padding:0}
 ol.steps{padding-left:1.2rem}ol.steps li{margin:.4rem 0}
-ul.docs-nav{margin:0 0 1.5rem;padding:0 0 .8rem;list-style:none;display:flex;flex-wrap:wrap;gap:.25rem .9rem;border-bottom:1px solid #e5e5e5}
-@media(prefers-color-scheme:dark){ul.docs-nav{border-color:#2a2a2a}}
-ul.docs-nav a[aria-current="page"]{font-weight:700;color:inherit}
+.docs-wrap{display:grid;grid-template-columns:13rem 1fr;gap:2.5rem;align-items:start}
+.docs-side{position:sticky;top:1.5rem}
+.docs-side .label{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:#888;margin:0 0 .5rem .5rem}
+.docs-side ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.1rem}
+.docs-side a{display:block;padding:.3rem .55rem;border-radius:6px;font-size:.95rem;color:inherit}
+.docs-side a:hover{background:rgba(127,127,127,.12);text-decoration:none}
+.docs-side a[aria-current="page"]{font-weight:700;background:rgba(127,127,127,.16)}
+.docs-main{min-width:0}
+.docs-main h1:first-child{margin-top:0}
+@media(max-width:640px){
+ .docs-wrap{grid-template-columns:1fr;gap:1rem}
+ .docs-side{position:static;border-bottom:1px solid #e5e5e5;padding-bottom:.7rem}
+ .docs-side ul{flex-direction:row;flex-wrap:wrap;gap:.2rem .6rem}
+}
+@media(prefers-color-scheme:dark){.docs-side{border-color:#2a2a2a}}
 footer.site{padding-top:1.5rem;padding-bottom:2rem;margin-top:2rem;border-top:1px solid #e5e5e5;font-size:.85rem;color:#666}
 @media(prefers-color-scheme:dark){footer.site{border-color:#2a2a2a;color:#999}}
 label{display:block;margin:1rem 0 .25rem;font-weight:600}
@@ -52,21 +65,23 @@ export interface LayoutOptions {
   title: string;
   /** Pre-rendered, trusted HTML for the page body. */
   body: string;
+  /** Widen the shell - used by the docs sidebar layout. */
+  wide?: boolean;
 }
 
 /** Wrap a page body in the shared shell: header nav + main + footer. */
-export function layout({ title, body }: LayoutOptions): string {
+export function layout({ title, body, wide = false }: LayoutOptions): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${htmlEscape(title)}</title>
-<style>${STYLE}</style></head><body>
+<style>${STYLE}</style></head><body${wide ? ' class="wide"' : ''}>
 <header class="site">
  <a class="brand" href="/">memorize Hub</a>
  <nav><a href="/docs">Docs</a><a href="/beta">Beta</a><a href="${GITHUB_URL}">GitHub</a></nav>
 </header>
 <main>${body}</main>
 <footer class="site">
- <p>memorize Hub — the optional relay for <a href="${GITHUB_URL}">memorize</a>'s cross-machine sync.
+ <p>memorize Hub - the optional relay for <a href="${GITHUB_URL}">memorize</a>'s cross-machine sync.
  AGPL-3.0. Events are stored as plaintext on the operator's machine (operator-trusted; not end-to-end encrypted).</p>
 </footer>
 </body></html>`;

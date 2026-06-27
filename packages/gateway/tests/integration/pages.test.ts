@@ -103,10 +103,23 @@ describe('public pages: landing + docs + beta', () => {
     expect(html).toContain(PUBLIC_URL);
   });
 
+  it('serves the consolidation page by slug', async () => {
+    const res = await fetch(`${base}/docs/consolidation`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('MEMORIZE_LLM_BACKEND');
+  });
+
   it('serves the troubleshooting page by slug', async () => {
     const res = await fetch(`${base}/docs/troubleshooting`);
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('doctor');
+  });
+
+  it('renders docs in a sidebar layout', async () => {
+    const res = await fetch(`${base}/docs`);
+    const html = await res.text();
+    expect(html).toContain('class="docs-side"');
+    expect(html).toContain('class="docs-wrap"');
   });
 
   it('returns 404 for an unknown docs slug', async () => {
