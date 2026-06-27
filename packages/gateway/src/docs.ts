@@ -424,6 +424,122 @@ commands and <a href="/docs/event-sourcing">Event sourcing core</a> for the log 
 projection underneath.</p>
 `.trim(),
   },
+  {
+    slug: 'projection-rebuild',
+    title: 'Projection and rebuild',
+    section: 'Internals',
+    render: () => `
+<h1>Projection and rebuild</h1>
+<p class="lead">The event log is the source of truth, but you never query it
+directly. Every read (a task, a decision, an open conflict, a valid memory) comes
+from a projection table that is recomputed from the log. This page covers how that
+read model is built and kept honest, in
+<code>src/services/projection-store.ts</code> and
+<code>src/projections/projector.ts</code>.</p>
+
+<h2>One reducer, many tables</h2>
+<p>A single function, <code>reduceProjectState</code>, folds the ordered events into
+an in-memory <code>ProjectState</code> (project, workstreams, tasks, handoffs,
+checkpoints, decisions, rules, conflicts, sessions, observations, memories). It is
+the only code that interprets events. The projection tables are sinks: nothing else
+writes them.</p>
+
+<h2>Replace-all rebuild</h2>
+<p><code>rebuildProjectProjection</code> reduces the whole log, then in one SQLite
+transaction deletes every projection table and re-inserts the reduced state. If the
+log has no <code>project.created</code> it throws rather than persist an empty
+project. Because the rebuild is all-or-nothing and the reducer is pure, the
+projection is always a deterministic function of the log: run it twice and the tables
+are identical; crash mid-rebuild and the previous tables stay intact until the next
+rebuild commits. The lexical search index (<code>search_fts</code>, SQLite FTS5) is a
+replace-all sink in the same transaction.</p>
+
+<h2>The one carve-out: reinforcement</h2>
+<p>Two columns on the <code>memories</code> table, <code>last_accessed_at</code> and
+<code>injection_count</code>, are not derived from events; they record that a memory
+was injected into a session. A naive replace-all would wipe them on every write, so
+the rebuild reads them before the delete and carries them over to the new rows. A
+true from-scratch replay (fresh database, corruption recovery) resets them, which is
+the accepted grade: decay stays deterministic from the log, while reinforcement is a
+derived-layer convenience, not part of the source of truth.</p>
+
+<h2>Reading the projection</h2>
+<p>Readers are plain queries over the tables: <code>getTask</code> /
+<code>listTasks</code>, <code>listDecisions</code> (accepted only by default,
+superseded on request), <code>listOpenConflicts</code> (status not resolved),
+<code>listValidMemories</code> (<code>invalid_at IS NULL</code>). A superseded
+decision or memory stays in its table so it is still findable; the status and
+validity columns filter the live view. For a point-in-time view,
+<code>getProjectStateAtRevision</code> reduces the log only up to a given event,
+reusing the same reducer with no table writes.</p>
+
+<h2>Why split write from read</h2>
+<p>An append-only log on the write side and a regenerable projection on the read side
+mean the read schema can change by editing the reducer and rebuilding, with no data
+migration of historical events. A corrupt or stale projection is repaired by running
+the rebuild again. The log never changes; only its interpretation does.</p>
+`.trim(),
+  },
+  {
+    slug: 'memory-retrieval',
+    title: 'Memory and retrieval',
+    section: 'Internals',
+    render: () => `
+<h1>Memory model and retrieval</h1>
+<p class="lead">memorize keeps two layers of memory and ranks them at retrieval time,
+so the next session opens with the few memories that matter. This page covers the two
+layers and the exact ranking, from
+<code>src/services/memory-retrieval-service.ts</code>.</p>
+
+<h2>Two layers</h2>
+<p>Short-term memory is the raw tail of <strong>observations</strong>: cheap,
+rule-filtered signals captured while the agent works (file writes, decisions, task
+transitions). Long-term memory is <strong>consolidated memories</strong>: at session
+boundaries a background pass distills observations into decisions, rationale, and
+progress, each scored with a salience from 1 to 10. Both are events
+(<code>observation.captured</code>, <code>memory.consolidated</code>) and both land in
+the same projection, so retrieval can rank them together.</p>
+
+<h2>The score</h2>
+<p>Retrieval (<code>retrieveMemoryContext</code>) puts both layers in one pool, scores
+each entry, then takes the best that fit a character budget. The pieces:</p>
+<pre><code>recency(age)      = exp(-ln2 * ageDays / 14)        # 1.0 fresh, 0.5 at 14 days
+memory.base       = 0.5 * (salience / 10) + 0.5 * recency(reference)
+memory.score      = 0.7 * (base + relevanceBoost)
+observation.score = 0.3 * recency(createdAt)</code></pre>
+<p>The half-life is 14 days, so a memory loses half its recency weight every two
+weeks. <code>reference</code> is the later of the memory's creation and its last
+access, so a memory that keeps getting injected decays from when it was last used, not
+when it was made. The <code>relevanceBoost</code> is 0.3 when a lexical (FTS5) search
+on the current task title matches the memory; with embeddings configured it becomes a
+graded semantic boost (0.3 times cosine similarity), and the stronger of the two is
+used. Long-term memories carry a 0.7 layer weight and short-term observations 0.3,
+which biases the mix toward consolidated meaning over raw tail without giving either a
+fixed slice of the budget.</p>
+
+<h2>Budget</h2>
+<p>The pool is sorted by score and filled greedily up to 4000 characters, which sits
+inside the renderer's 8000-character startup budget so memory can never crowd out the
+task and handoff blocks. Entries that do not fit are left out; no entry is
+truncated.</p>
+
+<h2>Forgetting without deleting</h2>
+<p>Forgetting happens only at retrieval time. Nothing is deleted: a low-scoring memory
+just falls outside the budget and is not injected this time, and it can return when the
+task or the recency changes. Combined with invalidate-not-delete in the log, the full
+history stays intact and replayable while the working set stays small.</p>
+
+<h2>Reinforcement</h2>
+<p>After the chosen memories are injected, <code>reinforceInjectedMemories</code> stamps
+<code>last_accessed_at</code> and bumps <code>injection_count</code> on those rows
+(<code>touchMemoryAccess</code>). This is a projection-only update; the event log is
+untouched, so the append-only invariant holds. It is best-effort by design: it
+survives routine rebuilds via the carry-over described in
+<a href="/docs/projection-rebuild">Projection and rebuild</a>, and resets on a
+from-scratch replay. Every constant here is a tuning parameter, set from the
+2026-06-08 design and meant to be adjusted against real transcripts.</p>
+`.trim(),
+  },
 ];
 
 /** Left sidebar nav generated from the page registry, grouped by section. */
