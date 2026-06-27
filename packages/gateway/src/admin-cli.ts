@@ -3,12 +3,14 @@
  * hub-gateway-admin — operator CLI for the beta control plane (manual approval).
  *
  *   hub-gateway-admin requests list [pending|approved|denied]
- *   hub-gateway-admin requests approve <requestId> [--label <text>]
+ *   hub-gateway-admin requests approve <requestId>
  *   hub-gateway-admin requests deny    <requestId>
+ *   hub-gateway-admin tokens issue     <email> [--label <text>]
  *   hub-gateway-admin tokens revoke    <tokenId>
  *
- * Reads the same GATEWAY_DB the server uses. `approve` mints a project-scoped
- * API key and prints the plaintext ONCE — hand it to the participant.
+ * Reads the same GATEWAY_DB the server uses. `approve` only grants access — the
+ * participant mints their own key at /account. Use `tokens issue` to mint a key
+ * for a participant who cannot sign in via GitHub; it prints the plaintext ONCE.
  */
 import { loadGatewayConfig } from './config.js';
 import { openGatewayDb } from './db.js';
@@ -16,6 +18,7 @@ import {
   approveAccessRequest,
   decideAccessRequest,
   getAccessRequest,
+  issueKeyForEmail,
   listAccessRequests,
   revokeToken,
   type AccessRequest,
@@ -62,14 +65,12 @@ function main(): void {
       if (existing.status !== 'pending') {
         console.warn(`note: request ${id} was already ${existing.status}; re-approving`);
       }
-      const result = approveAccessRequest(db, id, flag(rest, 'label'));
+      const result = approveAccessRequest(db, id);
       if (!result) fail(`no such request: ${id}`);
-      const { plaintext, prefix, request: req } = result;
+      const { request: req } = result;
       console.log(`approved ${id} — ${req.email} → ${req.requested_project_id}`);
-      console.log(`token prefix: ${prefix}`);
-      console.log('');
-      console.log('API KEY (shown once — give this to the participant):');
-      console.log(`  ${plaintext}`);
+      console.log('access granted. the participant signs in at /account to mint their key.');
+      console.log(`(non-OAuth fallback: hub-gateway-admin tokens issue ${req.email})`);
       return;
     }
 
@@ -79,6 +80,18 @@ function main(): void {
       if (!getAccessRequest(db, id)) fail(`no such request: ${id}`);
       decideAccessRequest(db, id, 'denied');
       console.log(`denied ${id}`);
+      return;
+    }
+
+    if (group === 'tokens' && action === 'issue') {
+      const email = rest[0];
+      if (!email) fail('usage: tokens issue <email> [--label <text>]');
+      const { plaintext, prefix } = issueKeyForEmail(db, email, flag(rest, 'label'));
+      console.log(`issued key for ${email}`);
+      console.log(`token prefix: ${prefix}`);
+      console.log('');
+      console.log('API KEY (shown once — give this to the participant):');
+      console.log(`  ${plaintext}`);
       return;
     }
 
@@ -92,8 +105,9 @@ function main(): void {
     fail(
       'usage:\n' +
         '  requests list [pending|approved|denied]\n' +
-        '  requests approve <requestId> [--label <text>]\n' +
+        '  requests approve <requestId>\n' +
         '  requests deny <requestId>\n' +
+        '  tokens issue <email> [--label <text>]\n' +
         '  tokens revoke <tokenId>',
     );
   } finally {

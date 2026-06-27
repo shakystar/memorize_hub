@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http';
 
 import type Database from 'better-sqlite3';
 
+import { handleAccount } from './account.js';
 import { handleBetaPage, handleBetaSubmit } from './beta.js';
 import type { GatewayConfig } from './config.js';
 import { handleAdmin } from './dashboard.js';
@@ -53,6 +54,12 @@ export function createGatewayServer(options: GatewayServerOptions): Server {
         }
         if (req.method === 'POST' && url.pathname === '/beta/requests') {
           await handleBetaSubmit(req, res, ctx);
+          return;
+        }
+
+        // Participant self-service (GitHub-OAuth login; 503 if not configured).
+        if (url.pathname === '/account' || url.pathname.startsWith('/account/')) {
+          await handleAccount(req, res, url, ctx);
           return;
         }
 

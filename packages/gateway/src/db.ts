@@ -58,6 +58,16 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       CREATE INDEX IF NOT EXISTS idx_requests_status ON access_requests(status);
     `);
   },
+  // v2 — link a user row to its GitHub identity (participant self-service login).
+  // email stays the cross-channel anchor; github_login is the stable handle for
+  // OAuth users and is unique when present (anonymous /beta users leave it null).
+  (db) => {
+    db.exec(`
+      ALTER TABLE users ADD COLUMN github_login TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_github
+        ON users(github_login) WHERE github_login IS NOT NULL;
+    `);
+  },
 ];
 
 function runMigrations(db: Database.Database): void {

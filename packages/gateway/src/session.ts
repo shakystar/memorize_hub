@@ -73,3 +73,43 @@ export function readOperator(
   const token = parseCookies(cookieHeader)[SESSION_COOKIE];
   return verifyValue<OperatorSession>(token, secret);
 }
+
+/**
+ * Participant session — a self-service (non-operator) user logged in via GitHub.
+ * Scoped to Path=/ (the dashboard lives at /account but links elsewhere), and
+ * carries the verified email so requests/keys attach to the right user row.
+ */
+export interface ParticipantSession {
+  userId: string;
+  login: string;
+  email: string;
+  exp: number;
+}
+
+const PARTICIPANT_COOKIE = 'hub_user';
+
+export function participantCookie(
+  identity: { userId: string; login: string; email: string },
+  secret: string,
+): string {
+  const session: ParticipantSession = {
+    userId: identity.userId,
+    login: identity.login,
+    email: identity.email,
+    exp: Date.now() + SESSION_TTL_MS,
+  };
+  const value = signValue(session, secret);
+  return `${PARTICIPANT_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${SESSION_TTL_MS / 1000}`;
+}
+
+export function clearParticipantCookie(): string {
+  return `${PARTICIPANT_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`;
+}
+
+export function readParticipant(
+  cookieHeader: string | undefined,
+  secret: string,
+): ParticipantSession | null {
+  const token = parseCookies(cookieHeader)[PARTICIPANT_COOKIE];
+  return verifyValue<ParticipantSession>(token, secret);
+}

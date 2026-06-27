@@ -28,8 +28,11 @@ const FORM = layout({
   title: 'memorize Hub - beta access',
   body: `
 <h1>Request beta access</h1>
-<p class="muted">The Hub relays memorize's cross-machine sync. Request access to a
-project and an operator will issue you a project-scoped API key.</p>
+<p class="lead">Have a GitHub account? <a href="/account">Sign in</a> to request access
+and manage your keys yourself.</p>
+<p class="muted">Or request by email below (no login). The Hub relays memorize's
+cross-machine sync; an operator approves your request, then you receive a
+project-scoped API key.</p>
 <form method="POST" action="/beta/requests">
  <label for="email">Email</label>
  <input id="email" name="email" type="email" required placeholder="you@example.com">
