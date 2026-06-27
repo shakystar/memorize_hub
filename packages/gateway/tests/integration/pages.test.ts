@@ -122,6 +122,20 @@ describe('public pages: landing + docs + beta', () => {
     expect(html).toContain('class="docs-wrap"');
   });
 
+  it('serves the event-sourcing internals page', async () => {
+    const res = await fetch(`${base}/docs/event-sourcing`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Event sourcing core');
+    expect(html).toContain('INSERT OR IGNORE');
+  });
+
+  it('groups the sidebar into sections', async () => {
+    const html = await (await fetch(`${base}/docs`)).text();
+    expect(html).toContain('>Guides<');
+    expect(html).toContain('>Internals<');
+  });
+
   it('returns 404 for an unknown docs slug', async () => {
     const res = await fetch(`${base}/docs/nope`);
     expect(res.status).toBe(404);
