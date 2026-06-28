@@ -104,6 +104,33 @@ describe('relay HTTP contract', () => {
     expect(empty).toEqual({ events: [] }); // no lastRemoteEventId when empty
   });
 
+  it('treats an E2E ciphertext payload as fully opaque (byte-faithful round-trip)', async () => {
+    const { baseUrl } = await startRelay();
+    // A realistic memorize #182 envelope nested as the event payload. The relay
+    // must neither parse, validate, transform, nor drop it — it routes on
+    // event.id alone (PROTOCOL.md invariant 4 + "Payload encryption" section).
+    const encrypted: OpaqueEvent = {
+      id: 'evt_enc',
+      type: 'memory.consolidated',
+      scopeType: 'project',
+      actor: 'user',
+      payload: {
+        __enc: 'A256GCM',
+        kid: 'a1b2c3d4e5f60718',
+        iv: 'AAAAAAAAAAAAAAAA',
+        ct: 'c2VjcmV0LWNpcGhlcnRleHQ',
+        tag: 'EQIDBAUGBwgJCgsMDQ4PEA',
+      },
+    };
+    await push(baseUrl, 'proj_enc', [encrypted]);
+
+    const pulled = await pull(baseUrl, 'proj_enc');
+    expect(pulled.events).toHaveLength(1);
+    // Deep-equal: the ciphertext envelope comes back exactly as sent. Anything
+    // less would mean the relay touched a payload it must treat as opaque.
+    expect(pulled.events[0]).toEqual(encrypted);
+  });
+
   it('dedups overlapping re-pushes; watermark stays monotonic', async () => {
     const { baseUrl } = await startRelay();
     await push(baseUrl, 'proj_a', [evt('evt_1'), evt('evt_2')]);
