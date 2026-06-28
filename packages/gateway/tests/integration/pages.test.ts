@@ -62,6 +62,8 @@ describe('public pages: landing + docs + beta', () => {
     expect(html).toContain('Cross-machine sync');
     expect(html).toContain('href="/beta"');
     expect(html).toContain('href="/docs"');
+    // Account sign-in is reachable from the shared header nav.
+    expect(html).toContain('href="/account"');
     // The landing page is not the request form itself.
     expect(html).not.toContain('<form');
   });

@@ -78,7 +78,7 @@ export function layout({ title, body, wide = false }: LayoutOptions): string {
 <style>${STYLE}</style></head><body${wide ? ' class="wide"' : ''}>
 <header class="site">
  <a class="brand" href="/">memorize Hub</a>
- <nav><a href="/docs">Docs</a><a href="/beta">Beta</a><a href="${GITHUB_URL}">GitHub</a></nav>
+ <nav><a href="/docs">Docs</a><a href="/account">Account</a><a href="/beta">Beta</a><a href="${GITHUB_URL}">GitHub</a></nav>
 </header>
 <main>${body}</main>
 <footer class="site">
