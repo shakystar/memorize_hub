@@ -103,6 +103,13 @@ describe('participant self-service: /account', () => {
     expect(html).toContain('Generate a new key');
     // Never leaks another user's project.
     expect(html).not.toContain('proj_bob');
+    // Copy-ready clone command (token placeholder until a key is minted), with
+    // the Hub origin injected and a clone-not-init nudge.
+    expect(html).toContain('Connect a machine');
+    expect(html).toContain(
+      'memorize project clone proj_alice --remote-url https://hub.example.test --token YOUR_KEY',
+    );
+    expect(html).toContain('never <code>init</code>');
   });
 
   it('redirects unauthenticated POSTs back to /account', async () => {
@@ -150,6 +157,10 @@ describe('participant self-service: /account', () => {
     const html = await res.text();
     expect(html).toContain('shown only once');
     expect(html).toContain('mzk_');
+    // The shown-once box embeds a ready-to-paste clone command with the real key.
+    expect(html).toMatch(
+      /memorize project clone proj_alice --remote-url https:\/\/hub\.example\.test --token mzk_/,
+    );
     expect(listApiTokens(db, aliceId).length).toBe(before + 1);
   });
 
