@@ -20,7 +20,7 @@ import {
   type ProjectGrant,
   type TokenSummary,
 } from './store.js';
-import { htmlEscape, layout } from './views.js';
+import { htmlEscape, layout, originFor } from './views.js';
 
 /**
  * Participant self-service surface (/account/*). GitHub login (reusing the
@@ -105,6 +105,47 @@ function projectsView(grants: ProjectGrant[]): string {
   return `<table><thead><tr><th>project</th><th>role</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+/** A non-secret placeholder safe to paste into a shell (no angle brackets). */
+const KEY_PLACEHOLDER = 'YOUR_KEY';
+
+function cloneCommand(origin: string, projectId: string, token: string): string {
+  return `memorize project clone ${projectId} --remote-url ${origin} --token ${token}`;
+}
+
+/** A copy-to-clipboard command row (button reads the sibling code's textContent). */
+function cmdBlock(cmd: string): string {
+  return `<div style="display:flex;gap:.5rem;align-items:center;margin:.4rem 0">
+ <code style="flex:1;overflow-x:auto;white-space:nowrap;padding:.5rem .6rem">${htmlEscape(cmd)}</code>
+ <button type="button" class="copy" style="padding:.35rem .8rem;border:0;border-radius:6px;cursor:pointer;font:inherit">copy</button></div>`;
+}
+
+/** Per-project clone commands. `token` embeds a real key (shown once); otherwise
+ * a placeholder. Always nudges `clone` over `init` (the fork footgun). */
+function connectView(grants: ProjectGrant[], origin: string, token?: string): string {
+  if (grants.length === 0) return '';
+  const key = token ?? KEY_PLACEHOLDER;
+  const rows = grants.map((g) => cmdBlock(cloneCommand(origin, g.project_id, key))).join('');
+  const note = token
+    ? `<p class="muted">Ready to paste — these embed the key above. On another machine,
+ run the command for that project. Use <code>clone</code>, never <code>init</code> —
+ <code>init</code> forks a new empty project that will not sync.</p>`
+    : `<p class="muted">Replace <code>${KEY_PLACEHOLDER}</code> with a key (Generate one below).
+ Use <code>clone</code>, never <code>init</code> — <code>init</code> forks a new empty
+ project that will not sync.</p>`;
+  return `<h2>Connect a machine</h2>${note}${rows}`;
+}
+
+const COPY_SCRIPT = `<script>
+document.addEventListener('click',function(e){
+ var b=e.target;
+ if(b&&b.classList&&b.classList.contains('copy')){
+  var c=b.previousElementSibling;
+  if(c&&navigator.clipboard){navigator.clipboard.writeText(c.textContent).then(function(){
+   var t=b.textContent;b.textContent='copied';setTimeout(function(){b.textContent=t},1200);});}
+ }
+});
+</script>`;
+
 function keysView(tokens: TokenSummary[]): string {
   if (tokens.length === 0) return '<p class="muted">No keys yet.</p>';
   const rows = tokens
@@ -125,6 +166,7 @@ function keysView(tokens: TokenSummary[]): string {
 function dashboardView(
   ctx: ProxyContext,
   session: ParticipantSession,
+  origin: string,
   flash: { notice?: string; issuedKey?: string } = {},
 ): string {
   const { db } = ctx;
@@ -133,10 +175,13 @@ function dashboardView(
   const requests = listAccessRequestsByEmail(db, session.email);
   const canIssue = grants.length > 0;
 
+  // A freshly minted key is shown once — alongside ready-to-paste clone commands
+  // that embed it for each approved project.
   const issued = flash.issuedKey
     ? `<div style="background:#fffbdd;border:1px solid #d4a72c;padding:1rem;border-radius:8px;margin:1rem 0">
  <strong>New API key — copy it now, it is shown only once:</strong><br>
- <code>${htmlEscape(flash.issuedKey)}</code></div>`
+ <code>${htmlEscape(flash.issuedKey)}</code>
+ ${grants.length > 0 ? `<div style="margin-top:.8rem">${connectView(grants, origin, flash.issuedKey)}</div>` : ''}</div>`
     : '';
   const notice = flash.notice ? `<p class="lead">${flash.notice}</p>` : '';
 
@@ -161,6 +206,8 @@ ${requestsView(requests)}
 <h2>Your projects</h2>
 ${projectsView(grants)}
 
+${connectView(grants, origin)}
+
 <h2>Your API keys</h2>
 ${keysView(tokens)}
 ${
@@ -170,7 +217,7 @@ ${
  <p class="muted">One key authenticates all your approved projects. Present it as
  <code>Authorization: Bearer &lt;key&gt;</code>.</p>`
       : '<p class="muted">Once a request is approved you can generate a key here.</p>'
-  }`;
+  }${COPY_SCRIPT}`;
 }
 
 // --- handler ---
@@ -189,6 +236,8 @@ export async function handleAccount(
   }
   const secret = config.sessionSecret!;
   const path = url.pathname;
+  // Hub origin baked into the copy-ready clone commands (config.publicUrl in prod).
+  const origin = originFor(req, config);
 
   // --- OAuth entry / return ---
   // The return leg is the shared /oauth/callback (see oauth-callback.ts).
@@ -213,7 +262,7 @@ export async function handleAccount(
       send(res, 200, signedOutView());
       return;
     }
-    send(res, 200, dashboardView(ctx, session));
+    send(res, 200, dashboardView(ctx, session, origin));
     return;
   }
 
@@ -227,13 +276,13 @@ export async function handleAccount(
     const projectId = (form?.get('projectId') ?? '').trim();
     const note = (form?.get('note') ?? '').trim();
     if (!PROJECT_ID_PATTERN.test(projectId)) {
-      send(res, 400, dashboardView(ctx, session, {
+      send(res, 400, dashboardView(ctx, session, origin, {
         notice: 'A project id like <code>proj_...</code> is required.',
       }));
       return;
     }
     createAccessRequest(db, session.email, projectId, note || undefined);
-    send(res, 201, dashboardView(ctx, session, {
+    send(res, 201, dashboardView(ctx, session, origin, {
       notice: `Request for <code>${htmlEscape(projectId)}</code> is pending operator approval.`,
     }));
     return;
@@ -243,13 +292,13 @@ export async function handleAccount(
     // A key authenticates the user across all their grants; only issue once the
     // user actually holds at least one approved project.
     if (listProjectAccess(db, session.userId).length === 0) {
-      send(res, 403, dashboardView(ctx, session, {
+      send(res, 403, dashboardView(ctx, session, origin, {
         notice: 'No approved projects yet — request access first.',
       }));
       return;
     }
     const { plaintext } = issueApiKey(db, session.userId, session.login);
-    send(res, 201, dashboardView(ctx, session, { issuedKey: plaintext }));
+    send(res, 201, dashboardView(ctx, session, origin, { issuedKey: plaintext }));
     return;
   }
 
@@ -257,11 +306,11 @@ export async function handleAccount(
   if (req.method === 'POST' && revokeMatch) {
     const tokenId = decodeURIComponent(revokeMatch[1]!);
     if (!tokenBelongsToUser(db, tokenId, session.userId)) {
-      send(res, 403, dashboardView(ctx, session, { notice: 'That key is not yours.' }));
+      send(res, 403, dashboardView(ctx, session, origin, { notice: 'That key is not yours.' }));
       return;
     }
     revokeToken(db, tokenId);
-    send(res, 200, dashboardView(ctx, session, { notice: 'Key revoked.' }));
+    send(res, 200, dashboardView(ctx, session, origin, { notice: 'Key revoked.' }));
     return;
   }
 
