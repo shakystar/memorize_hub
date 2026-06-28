@@ -170,6 +170,18 @@ describe('public pages: landing + docs + beta', () => {
     expect(index).toContain('>Evidence<');
   });
 
+  it('serves the security / threat-model page under a Security section', async () => {
+    const res = await fetch(`${base}/docs/security`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Security and trust model');
+    // States the metadata-leakage limit and the E2E envelope explicitly.
+    expect(html).toContain('__enc');
+    expect(html).toContain('operator-trusted');
+    const index = await (await fetch(`${base}/docs`)).text();
+    expect(index).toContain('>Security<');
+  });
+
   it('groups the sidebar into sections', async () => {
     const html = await (await fetch(`${base}/docs`)).text();
     expect(html).toContain('>Guides<');

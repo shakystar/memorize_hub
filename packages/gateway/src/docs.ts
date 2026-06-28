@@ -585,6 +585,70 @@ consolidation above it, and dogfooding is a short run, so behavior at hundreds o
 memories over months is not proven yet.</p>
 `.trim(),
   },
+  {
+    slug: 'security',
+    title: 'Security and trust model',
+    section: 'Security',
+    render: () => `
+<h1>Security and trust model</h1>
+<p class="lead">The Hub is a transport. It moves your project's event log between
+machines and gates who may read or write it. This page states plainly what it
+stores, what it can see, and where the trust boundaries are - so you can decide
+what to put through it.</p>
+
+<h2>What the Hub stores</h2>
+<p>Two planes, kept apart on purpose:</p>
+<ul>
+ <li><strong>Relay (data plane)</strong> - opaque per-project event logs, append-only
+ ndjson. It routes only on <code>event.id</code>, deduplicates by it, and preserves
+ order. It never parses, validates, or interprets a payload.</li>
+ <li><strong>Gateway (control plane)</strong> - only users, project-scoped API keys,
+ ACL, and access requests. API keys are stored as <strong>SHA-256 hashes</strong>, never
+ plaintext; the key is shown once at generation. The control-plane database never holds
+ event data.</li>
+</ul>
+
+<h2>Authentication and access</h2>
+<p>An API key is a bearer capability (a PAT). The gateway resolves it to a user and
+checks that user's ACL for the requested project before forwarding to the relay; a key
+that is not scoped to a project gets a <code>403</code>. Access is granted by an
+operator approving a request: signing in proves <em>who you are</em>, not <em>which
+projects you own</em>, so the manual approval step is the ownership gate. Keys are
+revocable and one key authenticates all of that user's approved projects.</p>
+
+<h2>In transit and at rest</h2>
+<p>In transit, TLS terminates at the edge; the relay itself speaks plain HTTP behind the
+gateway, which injects the internal relay token. At rest, by default event payloads are
+stored <strong>plaintext on the operator's machine</strong> - the Hub is
+operator-trusted. If you do not trust the operator with payload contents, turn on
+end-to-end encryption below.</p>
+
+<h2>End-to-end payload encryption</h2>
+<p>memorize can end-to-end-encrypt each event's <code>payload</code> at the sync
+boundary (memorize #182): the client encrypts on push and decrypts on pull with a
+per-project key the Hub never sees (AES-256-GCM, a self-describing
+<code>{ "__enc": ... }</code> envelope). Because the relay routes only on
+<code>event.id</code> and treats the payload as opaque, this needs no Hub change - it
+works through the Hub today.</p>
+<p><strong>What the Hub still sees, even with E2E on:</strong> the metadata -
+<code>event.id</code>, event type, scope, actor, plus each payload's <strong>size</strong>
+and the <strong>timing</strong> of pushes and pulls. Encryption hides payload contents,
+not the existence or shape of your activity. Treat your API key like a password, and use
+a separate key per machine so a lost device can be revoked on its own.</p>
+
+<h2>Future: key distribution</h2>
+<p>Provisioning the per-project encryption key is out of band today (you copy it at
+clone time; the Hub is not involved). A convenience path - the origin wraps the project
+key to each replica's public key and stores only the wrapped blobs on the Hub - is
+deferred. It would still be end-to-end (the Hub holds ciphertext and public keys only),
+but a relay that serves public keys is a man-in-the-middle vector, so it requires an
+out-of-band fingerprint verification step (TOFU / safety-number style). The Hub relays
+keys; it does not vouch for them.</p>
+
+<p class="muted">The exact wire rules for the encrypted envelope are in
+<a href="${GITHUB_URL.replace('/memorize', '/memorize_hub')}/blob/main/PROTOCOL.md">PROTOCOL.md</a>.</p>
+`.trim(),
+  },
 ];
 
 /** Left sidebar nav generated from the page registry, grouped by section. */
