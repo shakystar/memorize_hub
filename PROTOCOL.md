@@ -119,7 +119,34 @@ the local append-only log until a push succeeds).
    not overwrite.
 2. **Order-preserving.** Pull returns events in the order they were stored.
 3. **Idempotent.** Re-pushing a stored id is a no-op; re-pulling a range is safe.
-4. **Opaque payloads.** Do not depend on any field except `event.id`.
+4. **Opaque payloads.** Do not depend on any field except `event.id`. A payload
+   MAY be an end-to-end-encrypted ciphertext envelope (see below) - never parse,
+   validate, or transform it, and never assume it is plaintext.
+
+## Payload encryption (E2E)
+
+memorize MAY end-to-end-encrypt each event's `payload` at the sync boundary
+(memorize #182): the client encrypts on push and decrypts on pull with a
+per-project symmetric key the relay never sees. On the wire the `payload`
+becomes a self-describing ciphertext envelope:
+
+```jsonc
+{ "__enc": "A256GCM", "kid": "<key fingerprint>", "iv": "...", "ct": "...", "tag": "..." }
+```
+
+`event.id` and every routing/metadata field stay plaintext (`event.id` is
+authenticated as AAD). Because the relay routes only on `event.id` and treats
+`payload` as fully opaque, encryption needs **zero** relay or wire changes - an
+encrypted payload is just another opaque object. The relay MUST NOT parse,
+validate, or transform the envelope.
+
+**What the relay still sees, even with E2E on:** the metadata - `event.id`,
+event type, scope, actor, plus payload **size** and push/pull **timing**. E2E
+hides payload contents only, not the existence or shape of activity. Key
+distribution is out of band in v1 (manual copy at clone); an asymmetric
+key-wrapping path that would add Hub endpoints is deferred - it still requires
+out-of-band fingerprint verification, since a relay serving public keys is a
+man-in-the-middle vector.
 
 ## Non-goals (v1)
 
