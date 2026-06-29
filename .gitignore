@@ -1,8 +1,11 @@
+# dependencies / build output
 node_modules/
 dist/
-data/
-coverage/
 *.tsbuildinfo
+coverage/
+
+# relay runtime store (ndjson event logs)
+data/
 
 # gateway control-plane sqlite (runtime state)
 gateway.db
@@ -10,3 +13,14 @@ gateway.db-*
 
 # local tool / agent data — never tracked
 .memorize/
+.claude/
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log
