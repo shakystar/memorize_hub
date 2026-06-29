@@ -11,7 +11,12 @@ import type { GatewayConfig } from '../../src/config.js';
 import { openGatewayDb } from '../../src/db.js';
 import { createGatewayServer } from '../../src/server.js';
 import { operatorCookie } from '../../src/session.js';
-import { createAccessRequest, listAccessRequests } from '../../src/store.js';
+import {
+  createAccessRequest,
+  getProjectRole,
+  listAccessRequests,
+  upsertUser,
+} from '../../src/store.js';
 
 const SECRET = 'dashboard-secret';
 const OPERATOR = 'operator-login';
@@ -148,6 +153,19 @@ describe('operator dashboard', () => {
     expect(res.body).not.toMatch(/mzk_[\w-]+/);
     expect(listAccessRequests(db, 'pending').some((r) => r.id === id)).toBe(false);
     expect(listAccessRequests(db, 'approved').some((r) => r.id === id)).toBe(true);
+  });
+
+  it('grants the operator-selected viewer role on approve', async () => {
+    const id = createAccessRequest(db, 'view@example.com', 'proj_view');
+    const res = await req(base, '/admin/approve', {
+      method: 'POST',
+      cookie,
+      form: { requestId: id, role: 'viewer' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('viewer');
+    const userId = upsertUser(db, 'view@example.com');
+    expect(getProjectRole(db, userId, 'proj_view')).toBe('viewer');
   });
 
   it('ignores approve without an operator session', async () => {

@@ -83,7 +83,7 @@ function dashboardView(login: string, pending: AccessRequest[], decided: number)
  <td><code>${esc(r.requested_project_id)}</code></td>
  <td>${esc(r.note ?? '')}</td>
  <td>
-   <form class="inline" method="POST" action="/admin/approve"><input type="hidden" name="requestId" value="${esc(r.id)}"><button class="approve">Approve</button></form>
+   <form class="inline" method="POST" action="/admin/approve"><input type="hidden" name="requestId" value="${esc(r.id)}"><select name="role" title="access role"><option value="member">member (read+write)</option><option value="viewer">viewer (read-only)</option></select> <button class="approve">Approve</button></form>
    <form class="inline" method="POST" action="/admin/deny"><input type="hidden" name="requestId" value="${esc(r.id)}"><button class="deny">Deny</button></form>
  </td>
 </tr>`,
@@ -98,9 +98,10 @@ ${
   }`;
 }
 
-function approvedView(req: AccessRequest): string {
+function approvedView(req: AccessRequest, role: string): string {
   return `<h1>Approved</h1>
-<p><code>${esc(req.email)}</code> -> <code>${esc(req.requested_project_id)}</code></p>
+<p><code>${esc(req.email)}</code> -> <code>${esc(req.requested_project_id)}</code>
+ as <code>${esc(role)}</code></p>
 <p class="muted">Access granted. The participant signs in at <code>/account</code> and
 generates their own API key — no key to courier. For a participant who cannot use
 GitHub login, run <code>hub-gateway-admin tokens issue ${esc(req.email)}</code>.</p>
@@ -156,12 +157,13 @@ export async function handleAdmin(
     const form = await readForm(req);
     const requestId = form.get('requestId') ?? '';
     if (path === '/admin/approve') {
-      const result = approveAccessRequest(db, requestId);
+      const role = form.get('role') === 'viewer' ? 'viewer' : 'member';
+      const result = approveAccessRequest(db, requestId, role);
       if (!result) {
         send(res, 404, '<h1>Unknown request</h1><p><a href="/admin">Back</a></p>');
         return;
       }
-      send(res, 200, approvedView(result.request));
+      send(res, 200, approvedView(result.request, result.role));
       return;
     }
     decideAccessRequest(db, requestId, 'denied');

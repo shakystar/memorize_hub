@@ -17,6 +17,7 @@ import {
   revokeToken,
   tokenBelongsToUser,
   type AccessRequest,
+  type IssueKeyOptions,
   type ProjectGrant,
   type TokenSummary,
 } from './store.js';
@@ -155,19 +156,44 @@ function keysView(tokens: TokenSummary[]): string {
         : `<form method="POST" action="/account/keys/${htmlEscape(t.id)}/revoke" style="margin:0">
  <button class="submit" style="margin:0;padding:.3rem .7rem">Revoke</button></form>`;
       const used = t.last_used_at ? htmlEscape(t.last_used_at) : 'never';
-      return `<tr><td><code>${htmlEscape(t.prefix)}…</code></td>
- <td>${htmlEscape(t.label ?? '')}</td><td class="muted">${used}</td><td>${status}</td></tr>`;
+      const ro = t.readOnly ? ' <span class="muted">(read-only)</span>' : '';
+      const scope =
+        t.scopes.length === 0
+          ? 'all projects'
+          : t.scopes.map((p) => htmlEscape(p)).join(', ');
+      return `<tr><td><code>${htmlEscape(t.prefix)}…</code>${ro}</td>
+ <td>${htmlEscape(t.label ?? '')}</td><td class="muted">${scope}</td>
+ <td class="muted">${used}</td><td>${status}</td></tr>`;
     })
     .join('');
-  return `<table><thead><tr><th>key</th><th>label</th><th>last used</th><th></th></tr></thead>
+  return `<table><thead><tr><th>key</th><th>label</th><th>scope</th><th>last used</th><th></th></tr></thead>
 <tbody>${rows}</tbody></table>`;
+}
+
+/** The Generate-key form: scope checkboxes (all checked by default) + read-only. */
+function generateKeyForm(grants: ProjectGrant[]): string {
+  const boxes = grants
+    .map(
+      (g) => `<label style="font-weight:400;margin:.2rem 0">
+ <input type="checkbox" name="projects" value="${htmlEscape(g.project_id)}" checked style="width:auto">
+ <code>${htmlEscape(g.project_id)}</code> <span class="muted">(${htmlEscape(g.role)})</span></label>`,
+    )
+    .join('');
+  return `<form method="POST" action="/account/keys">
+ <p class="muted">Scope the key to specific projects (all selected = full access) and
+ optionally make it read-only. A key never exceeds your role on a project.</p>
+ ${boxes}
+ <label style="font-weight:400;margin:.4rem 0">
+  <input type="checkbox" name="readonly" value="1" style="width:auto"> read-only key (pull only)</label>
+ <button class="submit" type="submit">Generate a new key</button>
+</form>`;
 }
 
 function dashboardView(
   ctx: ProxyContext,
   session: ParticipantSession,
   origin: string,
-  flash: { notice?: string; issuedKey?: string } = {},
+  flash: { notice?: string; issuedKey?: string; issuedScope?: string[] } = {},
 ): string {
   const { db } = ctx;
   const grants = listProjectAccess(db, session.userId);
@@ -176,12 +202,16 @@ function dashboardView(
   const canIssue = grants.length > 0;
 
   // A freshly minted key is shown once — alongside ready-to-paste clone commands
-  // that embed it for each approved project.
+  // for the projects the key actually covers (its scope, or all if unscoped).
+  const covered =
+    flash.issuedScope && flash.issuedScope.length > 0
+      ? grants.filter((g) => flash.issuedScope!.includes(g.project_id))
+      : grants;
   const issued = flash.issuedKey
     ? `<div style="background:#fffbdd;border:1px solid #d4a72c;padding:1rem;border-radius:8px;margin:1rem 0">
  <strong>New API key — copy it now, it is shown only once:</strong><br>
  <code>${htmlEscape(flash.issuedKey)}</code>
- ${grants.length > 0 ? `<div style="margin-top:.8rem">${connectView(grants, origin, flash.issuedKey)}</div>` : ''}</div>`
+ ${covered.length > 0 ? `<div style="margin-top:.8rem">${connectView(covered, origin, flash.issuedKey)}</div>` : ''}</div>`
     : '';
   const notice = flash.notice ? `<p class="lead">${flash.notice}</p>` : '';
 
@@ -212,10 +242,7 @@ ${connectView(grants, origin)}
 ${keysView(tokens)}
 ${
     canIssue
-      ? `<form method="POST" action="/account/keys">
- <button class="submit" type="submit">Generate a new key</button></form>
- <p class="muted">One key authenticates all your approved projects. Present it as
- <code>Authorization: Bearer &lt;key&gt;</code>.</p>`
+      ? generateKeyForm(grants)
       : '<p class="muted">Once a request is approved you can generate a key here.</p>'
   }${COPY_SCRIPT}`;
 }
@@ -289,16 +316,27 @@ export async function handleAccount(
   }
 
   if (req.method === 'POST' && path === '/account/keys') {
-    // A key authenticates the user across all their grants; only issue once the
-    // user actually holds at least one approved project.
-    if (listProjectAccess(db, session.userId).length === 0) {
+    const grants = listProjectAccess(db, session.userId);
+    // Only issue once the user actually holds at least one approved project.
+    if (grants.length === 0) {
       send(res, 403, dashboardView(ctx, session, origin, {
         notice: 'No approved projects yet — request access first.',
       }));
       return;
     }
-    const { plaintext } = issueApiKey(db, session.userId, session.login);
-    send(res, 201, dashboardView(ctx, session, origin, { issuedKey: plaintext }));
+    const form = await readForm(req).catch(() => null);
+    const readOnly = form?.get('readonly') === '1';
+    // Keep only checked projects the user actually holds; selecting all (or none)
+    // means an unscoped key that covers every current grant.
+    const grantIds = new Set(grants.map((g) => g.project_id));
+    const selected = (form?.getAll('projects') ?? []).filter((p) => grantIds.has(p));
+    const scopeAll = selected.length === 0 || selected.length === grantIds.size;
+    const opts: IssueKeyOptions = { readOnly };
+    if (!scopeAll) opts.projectIds = selected;
+    const { plaintext } = issueApiKey(db, session.userId, session.login, opts);
+    const flash: { issuedKey: string; issuedScope?: string[] } = { issuedKey: plaintext };
+    if (!scopeAll) flash.issuedScope = selected;
+    send(res, 201, dashboardView(ctx, session, origin, flash));
     return;
   }
 

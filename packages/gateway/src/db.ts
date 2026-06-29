@@ -68,6 +68,21 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
         ON users(github_login) WHERE github_login IS NOT NULL;
     `);
   },
+  // v3 — per-key scoping (M4). A key may be limited to a subset of its user's
+  // projects (no scope rows = all of them, the legacy default) and/or marked
+  // read-only. Both only ever narrow access below the user's project_acl role;
+  // they never widen it.
+  (db) => {
+    db.exec(`
+      ALTER TABLE api_tokens ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE IF NOT EXISTS token_scopes (
+        token_id   TEXT NOT NULL REFERENCES api_tokens(id),
+        project_id TEXT NOT NULL,
+        PRIMARY KEY (token_id, project_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_scopes_token ON token_scopes(token_id);
+    `);
+  },
 ];
 
 function runMigrations(db: Database.Database): void {
