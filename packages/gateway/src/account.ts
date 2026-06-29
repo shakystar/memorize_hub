@@ -109,8 +109,15 @@ function projectsView(grants: ProjectGrant[]): string {
 /** A non-secret placeholder safe to paste into a shell (no angle brackets). */
 const KEY_PLACEHOLDER = 'YOUR_KEY';
 
-function cloneCommand(origin: string, projectId: string, token: string): string {
-  return `memorize project clone ${projectId} --remote-url ${origin} --token ${token}`;
+function cloneCommand(origin: string, projectId: string): string {
+  return `memorize project clone ${projectId} --remote-url ${origin}`;
+}
+
+/** One-time host login (#192, git-credential model): authenticate once, then
+ * clone/sync carry no inline --token. A real key is embedded when shown once;
+ * otherwise a placeholder the user replaces. */
+function authLoginCommand(origin: string, token: string): string {
+  return `memorize auth login --remote-url ${origin} --token ${token}`;
 }
 
 /** A copy-to-clipboard command row (button reads the sibling code's textContent). */
@@ -120,20 +127,26 @@ function cmdBlock(cmd: string): string {
  <button type="button" class="copy" style="padding:.35rem .8rem;border:0;border-radius:6px;cursor:pointer;font:inherit">copy</button></div>`;
 }
 
-/** Per-project clone commands. `token` embeds a real key (shown once); otherwise
- * a placeholder. Always nudges `clone` over `init` (the fork footgun). */
+/** Per-machine onboarding (#192 git-credential model): authenticate the host
+ * once (`auth login`), then clone each project token-free. `token` embeds a
+ * real key in the login command (shown once); otherwise a placeholder the user
+ * replaces. Always nudges `clone` over `init` (the fork footgun). */
 function connectView(grants: ProjectGrant[], origin: string, token?: string): string {
   if (grants.length === 0) return '';
   const key = token ?? KEY_PLACEHOLDER;
-  const rows = grants.map((g) => cmdBlock(cloneCommand(origin, g.project_id, key))).join('');
+  const login = cmdBlock(authLoginCommand(origin, key));
+  const clones = grants.map((g) => cmdBlock(cloneCommand(origin, g.project_id))).join('');
   const note = token
-    ? `<p class="muted">Ready to paste — these embed the key above. On another machine,
- run the command for that project. Use <code>clone</code>, never <code>init</code> —
+    ? `<p class="muted">On another machine: log in once with the key above, then clone each
+ project (no token needed). Use <code>clone</code>, never <code>init</code> -
  <code>init</code> forks a new empty project that will not sync.</p>`
-    : `<p class="muted">Replace <code>${KEY_PLACEHOLDER}</code> with a key (Generate one below).
- Use <code>clone</code>, never <code>init</code> — <code>init</code> forks a new empty
- project that will not sync.</p>`;
-  return `<h2>Connect a machine</h2>${note}${rows}`;
+    : `<p class="muted">Log in once per host (replace <code>${KEY_PLACEHOLDER}</code> with a key -
+ Generate one below), then clone each project (no token needed). Use <code>clone</code>,
+ never <code>init</code> - <code>init</code> forks a new empty project that will not sync.</p>`;
+  const reqNote = `<p class="muted"><em>Requires memorize 2.5.0+ - run <code>memorize update</code> first.</em></p>`;
+  return `<h2>Connect a machine</h2>${note}${reqNote}
+<p class="muted"><strong>1. Log in once (per host):</strong></p>${login}
+<p class="muted"><strong>2. Clone each project:</strong></p>${clones}`;
 }
 
 const COPY_SCRIPT = `<script>

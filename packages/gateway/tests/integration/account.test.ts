@@ -104,13 +104,20 @@ describe('participant self-service: /account', () => {
     expect(html).toContain('Generate a new key');
     // Never leaks another user's project.
     expect(html).not.toContain('proj_bob');
-    // Copy-ready clone command (token placeholder until a key is minted), with
-    // the Hub origin injected and a clone-not-init nudge.
+    // Copy-ready onboarding: log in once (placeholder key until one is minted),
+    // then a token-free clone per project, with the Hub origin injected and a
+    // clone-not-init nudge.
     expect(html).toContain('Connect a machine');
     expect(html).toContain(
-      'memorize project clone proj_alice --remote-url https://hub.example.test --token YOUR_KEY',
+      'memorize auth login --remote-url https://hub.example.test --token YOUR_KEY',
+    );
+    expect(html).toContain(
+      'memorize project clone proj_alice --remote-url https://hub.example.test',
     );
     expect(html).toContain('never <code>init</code>');
+    // The onboarding command set requires the 2.5.0 CLI; the page says so up front
+    // (auth login does not exist on older clients).
+    expect(html).toContain('Requires memorize 2.5.0+');
     // Generate-key form exposes per-project scope checkboxes + a read-only toggle.
     expect(html).toContain('name="projects"');
     expect(html).toContain('read-only key');
@@ -161,9 +168,13 @@ describe('participant self-service: /account', () => {
     const html = await res.text();
     expect(html).toContain('shown only once');
     expect(html).toContain('mzk_');
-    // The shown-once box embeds a ready-to-paste clone command with the real key.
+    // The shown-once box carries the real key in the one-time login command,
+    // plus a token-free clone for the covered project.
     expect(html).toMatch(
-      /memorize project clone proj_alice --remote-url https:\/\/hub\.example\.test --token mzk_/,
+      /memorize auth login --remote-url https:\/\/hub\.example\.test --token mzk_/,
+    );
+    expect(html).toContain(
+      'memorize project clone proj_alice --remote-url https://hub.example.test',
     );
     expect(listApiTokens(db, aliceId).length).toBe(before + 1);
   });
@@ -177,10 +188,13 @@ describe('participant self-service: /account', () => {
     });
     expect(res.status).toBe(201);
     const html = await res.text();
-    // The shown-once box (real key) embeds a command for the scoped project only;
-    // proj_alice2 must not appear with the real token (the placeholder section may).
-    expect(html).toMatch(/clone proj_alice --remote-url \S+ --token mzk_/);
-    expect(html).not.toMatch(/clone proj_alice2 --remote-url \S+ --token mzk_/);
+    // The shown-once box carries the real key once (host login) and lists a clone
+    // only for the covered project; proj_alice2 is out of scope, so it must not
+    // appear inside the box (the placeholder section below may still list it).
+    const box = html.slice(html.indexOf('New API key'), html.indexOf('Request project access'));
+    expect(box).toMatch(/memorize auth login --remote-url \S+ --token mzk_/);
+    expect(box).toContain('clone proj_alice --remote-url');
+    expect(box).not.toContain('clone proj_alice2');
     const scoped = listApiTokens(db, aliceId).find(
       (t) => t.readOnly && t.scopes.length === 1 && t.scopes[0] === 'proj_alice',
     );
