@@ -121,19 +121,23 @@ reference: <a href="${AGENT_GUIDE}">AGENT_GUIDE</a>.</p>
 project's memory across machines through the Hub. You need a project-scoped API
 key first - <a href="/beta">request one</a>; an operator issues it manually.</p>
 
-<h2>1. Push from your origin machine</h2>
+<h2>1. Log in once (per machine)</h2>
+<p>Authenticate this host to the Hub. Paste the key once; later clone/sync on this
+machine carry no inline token (the git-credential model).
+<strong>Requires memorize 2.5.0 or newer</strong> - run <code>memorize update</code> first:</p>
+<pre><code>memorize auth login \\
+  --remote-url ${url} \\
+  --token &lt;your-key&gt;</code></pre>
+
+<h2>2. Push from your origin machine</h2>
 <p>On the machine that already has the project, push its events to the Hub:</p>
-<pre><code>memorize project sync --push \\
-  --remote-url ${url} \\
-  --token &lt;your-key&gt;</code></pre>
+<pre><code>memorize project sync --push --remote-url ${url}</code></pre>
 
-<h2>2. Clone onto another machine</h2>
-<p>On a second machine, clone the same project id with the same key:</p>
-<pre><code>memorize project clone &lt;projectId&gt; \\
-  --remote-url ${url} \\
-  --token &lt;your-key&gt;</code></pre>
+<h2>3. Clone onto another machine</h2>
+<p>After that machine's own <code>auth login</code>, clone the same project id:</p>
+<pre><code>memorize project clone &lt;projectId&gt; --remote-url ${url}</code></pre>
 
-<h2>3. Keep them in sync</h2>
+<h2>4. Keep them in sync</h2>
 <p>Re-run <code>project sync --push</code> / <code>--pull</code> on each machine at
 work boundaries. Sync is <strong>asynchronous</strong> (poll-on-boundary): the
 origin can be offline when another machine pulls. Dedup is by event id, so

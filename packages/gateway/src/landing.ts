@@ -28,9 +28,9 @@ private beta; access is project-scoped. No GitHub account?
  project at <a href="/account">/account</a>.</li>
  <li>An operator <strong>approves</strong> your project (sign-in proves who you are,
  not which projects you own).</li>
- <li><strong>Generate your key</strong> in /account, then point memorize at the Hub
- with <code>--remote-url</code> and <code>--token</code> on each machine - events
- converge. <a href="/docs">Connect guide -></a></li>
+ <li><strong>Generate your key</strong> in /account, then run <code>memorize auth login</code>
+ once per machine (memorize 2.5.0+) - after that, <code>clone</code> and <code>sync</code> carry
+ no token and events converge. <a href="/docs">Connect guide -></a></li>
 </ol>
 `.trim();
 
