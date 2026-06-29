@@ -20,6 +20,8 @@ import { grantProjectAccess, issueApiKey, upsertUser } from '../../src/store.js'
 const RELAY_TOKEN = 'relay-internal-secret';
 const ALLOWED = 'proj_allowed';
 const OTHER = 'proj_other';
+const SECOND = 'proj_second';
+const VIEWER = 'proj_viewer';
 
 function listen(server: Server): Promise<number> {
   return new Promise((resolve) => {
@@ -40,6 +42,9 @@ describe('gateway proxy + auth + ACL', () => {
   let db: BetterSqlite3.Database;
   let gatewayUrl: string;
   let apiKey: string;
+  let roKey: string;
+  let scopedKey: string;
+  let viewerKey: string;
 
   beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), 'hub-gw-proxy-'));
@@ -64,10 +69,18 @@ describe('gateway proxy + auth + ACL', () => {
     const gwPort = await listen(gateway);
     gatewayUrl = `http://127.0.0.1:${gwPort}`;
 
-    // Beta participant scoped to ALLOWED only.
+    // Beta participant: member on ALLOWED + SECOND. A full key covers both.
     const userId = upsertUser(db, 'beta@example.com');
     grantProjectAccess(db, userId, ALLOWED);
+    grantProjectAccess(db, userId, SECOND);
     apiKey = issueApiKey(db, userId, 'beta').plaintext;
+    // A read-only key (pull only) and a key scoped to ALLOWED only.
+    roKey = issueApiKey(db, userId, 'ro', { readOnly: true }).plaintext;
+    scopedKey = issueApiKey(db, userId, 'scoped', { projectIds: [ALLOWED] }).plaintext;
+    // A viewer (read-only ACL) on its own project.
+    const viewerUser = upsertUser(db, 'viewer@example.com');
+    grantProjectAccess(db, viewerUser, VIEWER, 'viewer');
+    viewerKey = issueApiKey(db, viewerUser, 'viewer').plaintext;
   });
 
   afterAll(async () => {
@@ -125,6 +138,31 @@ describe('gateway proxy + auth + ACL', () => {
       headers: { authorization: `Bearer ${apiKey}` },
     });
     expect(res.status).toBe(400);
+  });
+
+  function pull(project: string, key: string): Promise<Response> {
+    return fetch(`${gatewayUrl}/v1/projects/${project}/events`, {
+      headers: { authorization: `Bearer ${key}` },
+    });
+  }
+
+  it('viewer role: can pull but a push is rejected with 403', async () => {
+    expect((await pull(VIEWER, viewerKey)).status).toBe(200);
+    const res = await push(VIEWER, viewerKey, [{ id: 'evt_v', type: 'demo' }]);
+    expect(res.status).toBe(403);
+  });
+
+  it('read-only key: can pull a member project but a push is rejected with 403', async () => {
+    expect((await pull(ALLOWED, roKey)).status).toBe(200);
+    const res = await push(ALLOWED, roKey, [{ id: 'evt_ro', type: 'demo' }]);
+    expect(res.status).toBe(403);
+  });
+
+  it('scoped key: covers its project, 403 on an unscoped but ACL-granted project', async () => {
+    const ok = await push(ALLOWED, scopedKey, [{ id: 'evt_s', type: 'demo' }]);
+    expect(ok.status).toBe(200);
+    // SECOND is granted to the user (member) but this key is not scoped to it.
+    expect((await pull(SECOND, scopedKey)).status).toBe(403);
   });
 
   it('serves its own public healthz without auth', async () => {

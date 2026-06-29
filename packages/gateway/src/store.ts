@@ -10,7 +10,12 @@ import { generateApiKey, hashToken, newId } from './auth.js';
 export interface TokenIdentity {
   tokenId: string;
   userId: string;
+  /** A read-only key may pull but never push, regardless of project_acl role. */
+  readOnly: boolean;
 }
+
+/** Per-project authorization ceiling set by the operator at approval. */
+export type ProjectRole = 'member' | 'viewer';
 
 export interface AccessRequest {
   id: string;
@@ -29,12 +34,12 @@ function nowIso(): string {
 /** Resolve an API key plaintext to its (non-revoked) owner, or null. */
 export function identifyToken(db: Database.Database, plaintext: string): TokenIdentity | null {
   const row = db
-    .prepare('SELECT id, user_id, revoked_at FROM api_tokens WHERE token_hash = ?')
+    .prepare('SELECT id, user_id, revoked_at, read_only FROM api_tokens WHERE token_hash = ?')
     .get(hashToken(plaintext)) as
-    | { id: string; user_id: string; revoked_at: string | null }
+    | { id: string; user_id: string; revoked_at: string | null; read_only: number }
     | undefined;
   if (!row || row.revoked_at) return null;
-  return { tokenId: row.id, userId: row.user_id };
+  return { tokenId: row.id, userId: row.user_id, readOnly: row.read_only === 1 };
 }
 
 /** Best-effort last-used stamp (observability only). */
@@ -42,15 +47,36 @@ export function touchToken(db: Database.Database, tokenId: string): void {
   db.prepare('UPDATE api_tokens SET last_used_at = ? WHERE id = ?').run(nowIso(), tokenId);
 }
 
-/** True iff the user holds any ACL row for the project. */
-export function hasProjectAccess(
+/** The user's ACL role for a project (authorization ceiling), or null if none. */
+export function getProjectRole(
   db: Database.Database,
   userId: string,
   projectId: string,
-): boolean {
+): ProjectRole | null {
   const row = db
-    .prepare('SELECT 1 FROM project_acl WHERE project_id = ? AND user_id = ?')
-    .get(projectId, userId);
+    .prepare('SELECT role FROM project_acl WHERE project_id = ? AND user_id = ?')
+    .get(projectId, userId) as { role: string } | undefined;
+  if (!row) return null;
+  return row.role === 'viewer' ? 'viewer' : 'member';
+}
+
+/**
+ * Does this key cover the project? A key with no scope rows covers all of its
+ * user's projects (the legacy default); a scoped key covers only its rows. This
+ * only narrows access — the user's ACL is still the ceiling, checked separately.
+ */
+export function tokenCoversProject(
+  db: Database.Database,
+  tokenId: string,
+  projectId: string,
+): boolean {
+  const scoped = db
+    .prepare('SELECT 1 FROM token_scopes WHERE token_id = ? LIMIT 1')
+    .get(tokenId);
+  if (!scoped) return true; // unscoped = all projects
+  const row = db
+    .prepare('SELECT 1 FROM token_scopes WHERE token_id = ? AND project_id = ?')
+    .get(tokenId, projectId);
   return row !== undefined;
 }
 
@@ -116,19 +142,49 @@ export function grantProjectAccess(
   ).run(projectId, userId, role, nowIso());
 }
 
-/** Mint and persist a project-scoped API key; returns the one-time plaintext. */
+export interface IssueKeyOptions {
+  /** A read-only key may pull but never push. */
+  readOnly?: boolean;
+  /** Limit the key to these projects; omitted/empty = all the user's projects. */
+  projectIds?: string[];
+}
+
+/**
+ * Mint and persist an API key; returns the one-time plaintext. `opts` may narrow
+ * the key to a project subset and/or mark it read-only (both only ever restrict
+ * below the user's project_acl, never widen it). Scope insert + token insert run
+ * in one transaction.
+ */
 export function issueApiKey(
   db: Database.Database,
   userId: string,
   label?: string,
+  opts: IssueKeyOptions = {},
 ): { plaintext: string; tokenId: string; prefix: string } {
   const key = generateApiKey();
   const id = newId('tok');
-  db.prepare(
-    `INSERT INTO api_tokens (id, user_id, token_hash, prefix, label, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(id, userId, key.hash, key.prefix, label ?? null, nowIso());
+  const scopes = [...new Set(opts.projectIds ?? [])];
+  const write = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO api_tokens (id, user_id, token_hash, prefix, label, created_at, read_only)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, userId, key.hash, key.prefix, label ?? null, nowIso(), opts.readOnly ? 1 : 0);
+    const insScope = db.prepare(
+      'INSERT OR IGNORE INTO token_scopes (token_id, project_id) VALUES (?, ?)',
+    );
+    for (const projectId of scopes) insScope.run(id, projectId);
+  });
+  write();
   return { plaintext: key.plaintext, tokenId: id, prefix: key.prefix };
+}
+
+/** A key's project scopes; empty array means it covers all the user's projects. */
+export function listTokenScopes(db: Database.Database, tokenId: string): string[] {
+  return (
+    db
+      .prepare('SELECT project_id FROM token_scopes WHERE token_id = ? ORDER BY project_id')
+      .all(tokenId) as { project_id: string }[]
+  ).map((r) => r.project_id);
 }
 
 /** Revoke a token by id; returns true if a live token was revoked. */
@@ -161,16 +217,24 @@ export interface TokenSummary {
   created_at: string;
   revoked_at: string | null;
   last_used_at: string | null;
+  readOnly: boolean;
+  /** Project scopes; empty = covers all the user's projects. */
+  scopes: string[];
 }
 
 /** A user's keys, non-secret metadata only (the plaintext is never stored). */
 export function listApiTokens(db: Database.Database, userId: string): TokenSummary[] {
-  return db
+  const rows = db
     .prepare(
-      `SELECT id, prefix, label, created_at, revoked_at, last_used_at
+      `SELECT id, prefix, label, created_at, revoked_at, last_used_at, read_only
          FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC`,
     )
-    .all(userId) as TokenSummary[];
+    .all(userId) as Array<Omit<TokenSummary, 'readOnly' | 'scopes'> & { read_only: number }>;
+  return rows.map(({ read_only, ...rest }) => ({
+    ...rest,
+    readOnly: read_only === 1,
+    scopes: listTokenScopes(db, rest.id),
+  }));
 }
 
 /** Ownership gate for self-service revoke: does this token belong to this user? */
@@ -242,21 +306,23 @@ export function decideAccessRequest(
 }
 
 /**
- * Approve a request: upsert the user, grant project access, and mark approved.
- * Approval no longer mints a key — the participant self-serves their key from
- * /account (or, for non-OAuth users, the operator runs `tokens issue`). This
- * keeps the operator out of key delivery. Returns null if the id is unknown.
+ * Approve a request: upsert the user, grant project access at the operator-chosen
+ * role (member = read+write, viewer = read-only; default member), and mark
+ * approved. Approval no longer mints a key — the participant self-serves it from
+ * /account (or, for non-OAuth users, the operator runs `tokens issue`). Returns
+ * null if the id is unknown.
  */
 export function approveAccessRequest(
   db: Database.Database,
   requestId: string,
-): { request: AccessRequest } | null {
+  role: ProjectRole = 'member',
+): { request: AccessRequest; role: ProjectRole } | null {
   const request = getAccessRequest(db, requestId);
   if (!request) return null;
   const userId = upsertUser(db, request.email);
-  grantProjectAccess(db, userId, request.requested_project_id);
+  grantProjectAccess(db, userId, request.requested_project_id, role);
   decideAccessRequest(db, requestId, 'approved');
-  return { request };
+  return { request, role };
 }
 
 /**

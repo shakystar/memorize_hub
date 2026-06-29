@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type Database from 'better-sqlite3';
 
 import type { GatewayConfig } from './config.js';
-import { hasProjectAccess, identifyToken, touchToken } from './store.js';
+import { getProjectRole, identifyToken, tokenCoversProject, touchToken } from './store.js';
 
 /** Mirrors the relay's path-id contract (PROTOCOL.md). */
 const PROJECT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
@@ -71,9 +71,27 @@ export async function handleEventsProxy(
     sendJson(res, 400, { error: 'invalid project id' });
     return;
   }
-  if (!hasProjectAccess(ctx.db, identity.userId, projectId)) {
+  // Authorization is min(ACL role, key scope, key read-only). The ACL role is the
+  // operator-set ceiling; the key may only narrow it, never widen it.
+  const role = getProjectRole(ctx.db, identity.userId, projectId);
+  if (!role) {
     sendJson(res, 403, { error: 'API key is not scoped to this project' });
     return;
+  }
+  if (!tokenCoversProject(ctx.db, identity.tokenId, projectId)) {
+    sendJson(res, 403, { error: 'this key is not scoped to this project' });
+    return;
+  }
+  if (req.method === 'POST') {
+    // Push. Requires write access at every layer.
+    if (role !== 'member') {
+      sendJson(res, 403, { error: 'read-only access for this project' });
+      return;
+    }
+    if (identity.readOnly) {
+      sendJson(res, 403, { error: 'this key is read-only' });
+      return;
+    }
   }
 
   let body: Buffer | undefined;

@@ -3,7 +3,7 @@
  * hub-gateway-admin — operator CLI for the beta control plane (manual approval).
  *
  *   hub-gateway-admin requests list [pending|approved|denied]
- *   hub-gateway-admin requests approve <requestId>
+ *   hub-gateway-admin requests approve <requestId> [--role member|viewer]
  *   hub-gateway-admin requests deny    <requestId>
  *   hub-gateway-admin tokens issue     <email> [--label <text>]
  *   hub-gateway-admin tokens revoke    <tokenId>
@@ -59,16 +59,17 @@ function main(): void {
 
     if (group === 'requests' && action === 'approve') {
       const id = rest[0];
-      if (!id) fail('usage: requests approve <requestId> [--label <text>]');
+      if (!id) fail('usage: requests approve <requestId> [--role member|viewer]');
       const existing = getAccessRequest(db, id);
       if (!existing) fail(`no such request: ${id}`);
       if (existing.status !== 'pending') {
         console.warn(`note: request ${id} was already ${existing.status}; re-approving`);
       }
-      const result = approveAccessRequest(db, id);
+      const role = flag(rest, 'role') === 'viewer' ? 'viewer' : 'member';
+      const result = approveAccessRequest(db, id, role);
       if (!result) fail(`no such request: ${id}`);
       const { request: req } = result;
-      console.log(`approved ${id} — ${req.email} → ${req.requested_project_id}`);
+      console.log(`approved ${id} — ${req.email} → ${req.requested_project_id} as ${result.role}`);
       console.log('access granted. the participant signs in at /account to mint their key.');
       console.log(`(non-OAuth fallback: hub-gateway-admin tokens issue ${req.email})`);
       return;
@@ -105,7 +106,7 @@ function main(): void {
     fail(
       'usage:\n' +
         '  requests list [pending|approved|denied]\n' +
-        '  requests approve <requestId>\n' +
+        '  requests approve <requestId> [--role member|viewer]\n' +
         '  requests deny <requestId>\n' +
         '  tokens issue <email> [--label <text>]\n' +
         '  tokens revoke <tokenId>',

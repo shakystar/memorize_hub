@@ -64,6 +64,7 @@ describe('participant self-service: /account', () => {
     db = openGatewayDb(join(dir, 'gateway.db'));
     aliceId = upsertUserByGithub(db, 'alice', 'alice@example.com');
     grantProjectAccess(db, aliceId, 'proj_alice');
+    grantProjectAccess(db, aliceId, 'proj_alice2');
     aliceTokenId = issueApiKey(db, aliceId, 'alice').tokenId;
     const bobId = upsertUserByGithub(db, 'bob', 'bob@example.com');
     grantProjectAccess(db, bobId, 'proj_bob');
@@ -110,6 +111,9 @@ describe('participant self-service: /account', () => {
       'memorize project clone proj_alice --remote-url https://hub.example.test --token YOUR_KEY',
     );
     expect(html).toContain('never <code>init</code>');
+    // Generate-key form exposes per-project scope checkboxes + a read-only toggle.
+    expect(html).toContain('name="projects"');
+    expect(html).toContain('read-only key');
   });
 
   it('redirects unauthenticated POSTs back to /account', async () => {
@@ -162,6 +166,25 @@ describe('participant self-service: /account', () => {
       /memorize project clone proj_alice --remote-url https:\/\/hub\.example\.test --token mzk_/,
     );
     expect(listApiTokens(db, aliceId).length).toBe(before + 1);
+  });
+
+  it('mints a read-only key scoped to a project subset', async () => {
+    const res = await fetch(`${base}/account/keys`, {
+      method: 'POST',
+      headers: { cookie: alice(), 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'readonly=1&projects=proj_alice',
+      redirect: 'manual',
+    });
+    expect(res.status).toBe(201);
+    const html = await res.text();
+    // The shown-once box (real key) embeds a command for the scoped project only;
+    // proj_alice2 must not appear with the real token (the placeholder section may).
+    expect(html).toMatch(/clone proj_alice --remote-url \S+ --token mzk_/);
+    expect(html).not.toMatch(/clone proj_alice2 --remote-url \S+ --token mzk_/);
+    const scoped = listApiTokens(db, aliceId).find(
+      (t) => t.readOnly && t.scopes.length === 1 && t.scopes[0] === 'proj_alice',
+    );
+    expect(scoped).toBeDefined();
   });
 
   it("refuses to revoke another user's key, but revokes the owner's own", async () => {
