@@ -124,12 +124,20 @@ fine.
   done in the gateway not the relay), ACL reverse proxy that injects the relay's
   internal token, public **beta access-request page** + `hub-gateway-admin`
   manual-approval CLI, and a two-replica async-convergence e2e through the gateway.
-- **M4** - operator **OAuth login + dashboard** in the gateway (browser approval
-  UI over the same access-requests). Open decision: OAuth provider.
-- **M5** - **public deploy**: gateway (public, TLS-terminated) + relay
-  (internal-only) Docker/compose, public domain, onboard the first beta
-  participant, measure real cross-device async convergence. Open decision:
-  deploy target.
+- **M4 (done)** - operator **OAuth login + dashboard** (`/admin`) + participant
+  self-service (`/account`), browser approval UI, per-key project scoping +
+  read-only keys. Decision resolved: **GitHub OAuth** (one app, one
+  `/oauth/callback`, backs both flows).
+- **M5 (done, infra)** - **public deploy** on **Fly.io** (decision resolved):
+  gateway (public, TLS-terminated) + relay (internal-only, token-gated) in one
+  Docker image, durable `/data` volume, CI continuous deploy + live smoke test;
+  public at `https://memorize-hub-shakystar.fly.dev`. See `docs/DEPLOY.md`.
+  *Remaining (validation, not build):* onboard the first real beta participant,
+  measure real cross-device async convergence over the live Hub.
+- **Personal-memory store (done, 2026-06-30, #32)** - per-account, owner-only
+  `psm_` store + `GET /v1/account/personal-store` discovery; the gateway-side
+  enforcement of the personal-vs-project isolation (memorize#181). Client side
+  tracked in memorize#213.
 - **Later** - retention/compaction policy, and a **realtime push channel**
   (SSE/websocket) for memorize P3-c (cross-machine live watermark deltas, not
   just poll-on-boundary).
