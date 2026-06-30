@@ -42,12 +42,22 @@ The sibling `memorize` repo holds the client.
 - **relay** - v1 (2026-06-12), now at `packages/relay`: `node:http` server, ndjson
   store, env config, vitest unit + HTTP contract tests. Reference behavior lives in
   `../memorize/tests/harness/relay-stub.ts` + the golden round-trip there.
-- **gateway** - v0 (2026-06-26), `packages/gateway`: control-plane DB
-  (better-sqlite3), project-scoped API keys, ACL reverse proxy, beta
-  access-request page, `hub-gateway-admin` CLI (manual approval), and a
-  two-replica async-convergence e2e through the gateway (`pnpm --filter
-  @shakystar/memorize-hub-gateway e2e`). OAuth/dashboard (M4) and public deploy
-  (M5) are not built yet.
+- **gateway** - `packages/gateway`: control-plane DB (better-sqlite3),
+  project-scoped API keys, ACL reverse proxy, beta access-request page,
+  `hub-gateway-admin` CLI (manual approval), and a two-replica async-convergence
+  e2e through the gateway (`pnpm --filter @shakystar/memorize-hub-gateway e2e`).
+  - **M4 done** - GitHub-OAuth operator dashboard (`/admin`) + participant
+    self-service (`/account`), per-key project scoping + read-only keys.
+  - **M5 done (infra)** - deployed live on Fly.io
+    (`https://memorize-hub-shakystar.fly.dev`): gateway public + TLS, relay
+    internal-only + token-gated, durable `/data` volume, CI continuous deploy +
+    smoke test. See `docs/DEPLOY.md`.
+  - **Personal-memory store** (2026-06-30, #32) - per-account owner-only `psm_`
+    store + `GET /v1/account/personal-store` discovery; client side tracked in
+    memorize#213.
+  - **Remaining** - M5 *validation* only (onboard a real beta participant,
+    measure live cross-device convergence); then "Later": relay
+    retention/compaction, realtime SSE push (memorize P3-c).
 
 Root `pnpm -r check` = typecheck + lint + test across both packages.
 
