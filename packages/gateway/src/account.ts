@@ -10,6 +10,7 @@ import {
 } from './session.js';
 import {
   createAccessRequest,
+  getOrCreatePersonalStore,
   issueApiKey,
   listAccessRequestsByEmail,
   listApiTokens,
@@ -183,6 +184,21 @@ function keysView(tokens: TokenSummary[]): string {
 <tbody>${rows}</tbody></table>`;
 }
 
+/**
+ * Personal memory: the account-scoped, cross-project store. Private by
+ * construction — never shared, never grantable, reachable only by this account's
+ * own (unscoped) keys. The id is shown so a user can confirm what their client
+ * discovered; sync is automatic once any unscoped key is configured.
+ */
+function personalMemoryView(storeId: string): string {
+  return `<h2>Personal memory</h2>
+<p class="muted">Your global, cross-project memory syncs to this account-scoped store.
+ It is <strong>private</strong> - no other account, project, or team can reach it, and it
+ is never grantable or shared. Any unscoped key below syncs it automatically.</p>
+<table><thead><tr><th>personal store id</th></tr></thead>
+<tbody><tr><td><code>${htmlEscape(storeId)}</code></td></tr></tbody></table>`;
+}
+
 /** The Generate-key form: scope checkboxes (all checked by default) + read-only. */
 function generateKeyForm(grants: ProjectGrant[]): string {
   const boxes = grants
@@ -194,7 +210,9 @@ function generateKeyForm(grants: ProjectGrant[]): string {
     .join('');
   return `<form method="POST" action="/account/keys">
  <p class="muted">Scope the key to specific projects (all selected = full access) and
- optionally make it read-only. A key never exceeds your role on a project.</p>
+ optionally make it read-only. A key never exceeds your role on a project.
+ An unscoped key (no projects narrowed) also syncs your personal memory; a
+ project-scoped key never does.</p>
  ${boxes}
  <label style="font-weight:400;margin:.4rem 0">
   <input type="checkbox" name="readonly" value="1" style="width:auto"> read-only key (pull only)</label>
@@ -212,7 +230,10 @@ function dashboardView(
   const grants = listProjectAccess(db, session.userId);
   const tokens = listApiTokens(db, session.userId);
   const requests = listAccessRequestsByEmail(db, session.email);
-  const canIssue = grants.length > 0;
+  const personal = getOrCreatePersonalStore(db, session.userId);
+  // Every signed-in account owns a personal store, so a key is always issuable
+  // (an unscoped key syncs personal memory even with no approved projects).
+  const canIssue = true;
 
   // A freshly minted key is shown once — alongside ready-to-paste clone commands
   // for the projects the key actually covers (its scope, or all if unscoped).
@@ -249,15 +270,13 @@ ${requestsView(requests)}
 <h2>Your projects</h2>
 ${projectsView(grants)}
 
+${personalMemoryView(personal.storeId)}
+
 ${connectView(grants, origin)}
 
 <h2>Your API keys</h2>
 ${keysView(tokens)}
-${
-    canIssue
-      ? generateKeyForm(grants)
-      : '<p class="muted">Once a request is approved you can generate a key here.</p>'
-  }${COPY_SCRIPT}`;
+${canIssue ? generateKeyForm(grants) : ''}${COPY_SCRIPT}`;
 }
 
 // --- handler ---
@@ -329,14 +348,10 @@ export async function handleAccount(
   }
 
   if (req.method === 'POST' && path === '/account/keys') {
+    // Every signed-in account owns a personal store, so a key is always issuable.
+    // With no approved projects the form has no scope boxes → an unscoped key,
+    // which syncs personal memory (and any project later granted to this user).
     const grants = listProjectAccess(db, session.userId);
-    // Only issue once the user actually holds at least one approved project.
-    if (grants.length === 0) {
-      send(res, 403, dashboardView(ctx, session, origin, {
-        notice: 'No approved projects yet — request access first.',
-      }));
-      return;
-    }
     const form = await readForm(req).catch(() => null);
     const readOnly = form?.get('readonly') === '1';
     // Keep only checked projects the user actually holds; selecting all (or none)

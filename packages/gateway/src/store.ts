@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-import { generateApiKey, hashToken, newId } from './auth.js';
+import { generateApiKey, hashToken, isPersonalStoreId, newId } from './auth.js';
 
 /**
  * Control-plane data access over the gateway DB (see db.ts). All identity / ACL
@@ -80,6 +80,53 @@ export function tokenCoversProject(
   return row !== undefined;
 }
 
+export interface PersonalStore {
+  /** The relay path id this account's personal memory syncs under (`psm_…`). */
+  storeId: string;
+  createdAt: string;
+}
+
+/**
+ * Get-or-create the account's single personal-memory store (idempotent). This is
+ * the relay path id its global, cross-project personal memory syncs under —
+ * owned by exactly one account and never grantable to another (see the proxy's
+ * owner-only gate). The DB holds only the mapping; the events live in the relay,
+ * opaque, exactly like project events.
+ */
+export function getOrCreatePersonalStore(db: Database.Database, userId: string): PersonalStore {
+  const existing = db
+    .prepare('SELECT store_id, created_at FROM personal_stores WHERE user_id = ?')
+    .get(userId) as { store_id: string; created_at: string } | undefined;
+  if (existing) return { storeId: existing.store_id, createdAt: existing.created_at };
+  const storeId = newId('psm');
+  const createdAt = nowIso();
+  db.prepare('INSERT INTO personal_stores (user_id, store_id, created_at) VALUES (?, ?, ?)').run(
+    userId,
+    storeId,
+    createdAt,
+  );
+  return { storeId, createdAt };
+}
+
+/** Resolve a personal-store path id to its owning user id, or null if it is not one. */
+export function getPersonalStoreOwner(db: Database.Database, storeId: string): string | null {
+  const row = db
+    .prepare('SELECT user_id FROM personal_stores WHERE store_id = ?')
+    .get(storeId) as { user_id: string } | undefined;
+  return row ? row.user_id : null;
+}
+
+/**
+ * Does this key reach personal memory? Only an UNSCOPED key (no project-scope
+ * rows) does — a key deliberately narrowed to a project subset never silently
+ * also grants the account's personal store. Mirrors tokenCoversProject's
+ * "unscoped = everything" rule, applied on the personal axis.
+ */
+export function tokenCoversPersonal(db: Database.Database, tokenId: string): boolean {
+  const scoped = db.prepare('SELECT 1 FROM token_scopes WHERE token_id = ? LIMIT 1').get(tokenId);
+  return scoped === undefined;
+}
+
 /**
  * Get-or-create a user from a GitHub identity; returns the user id. Resolves by
  * github_login first, then by email (attaching the login to a pre-existing
@@ -135,6 +182,11 @@ export function grantProjectAccess(
   projectId: string,
   role = 'member',
 ): void {
+  // The personal-store namespace is reserved: a personal store is owned by exactly
+  // one account and is never grantable as a project (the privacy isolation).
+  if (isPersonalStoreId(projectId)) {
+    throw new Error(`refusing to grant a reserved personal-store id: ${projectId}`);
+  }
   db.prepare(
     `INSERT INTO project_acl (project_id, user_id, role, created_at)
      VALUES (?, ?, ?, ?)

@@ -3,7 +3,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type Database from 'better-sqlite3';
 
 import type { GatewayConfig } from './config.js';
-import { getProjectRole, identifyToken, tokenCoversProject, touchToken } from './store.js';
+import {
+  getOrCreatePersonalStore,
+  getPersonalStoreOwner,
+  getProjectRole,
+  identifyToken,
+  tokenCoversPersonal,
+  tokenCoversProject,
+  touchToken,
+} from './store.js';
 
 /** Mirrors the relay's path-id contract (PROTOCOL.md). */
 const PROJECT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
@@ -71,26 +79,47 @@ export async function handleEventsProxy(
     sendJson(res, 400, { error: 'invalid project id' });
     return;
   }
-  // Authorization is min(ACL role, key scope, key read-only). The ACL role is the
-  // operator-set ceiling; the key may only narrow it, never widen it.
-  const role = getProjectRole(ctx.db, identity.userId, projectId);
-  if (!role) {
-    sendJson(res, 403, { error: 'API key is not scoped to this project' });
-    return;
-  }
-  if (!tokenCoversProject(ctx.db, identity.tokenId, projectId)) {
-    sendJson(res, 403, { error: 'this key is not scoped to this project' });
-    return;
-  }
-  if (req.method === 'POST') {
-    // Push. Requires write access at every layer.
-    if (role !== 'member') {
-      sendJson(res, 403, { error: 'read-only access for this project' });
+
+  // A personal-memory store and a project share this route and the same opaque
+  // event contract, but authorize on different axes. Personal stores are
+  // owner-only and never go through project ACL — that hard isolation is the
+  // privacy guarantee (a personal store is never grantable to another account).
+  const personalOwner = getPersonalStoreOwner(ctx.db, projectId);
+  if (personalOwner !== null) {
+    if (personalOwner !== identity.userId) {
+      sendJson(res, 403, { error: 'not your personal store' });
       return;
     }
-    if (identity.readOnly) {
+    if (!tokenCoversPersonal(ctx.db, identity.tokenId)) {
+      sendJson(res, 403, { error: 'this key is not scoped for personal memory' });
+      return;
+    }
+    if (req.method === 'POST' && identity.readOnly) {
       sendJson(res, 403, { error: 'this key is read-only' });
       return;
+    }
+  } else {
+    // Project store. Authorization is min(ACL role, key scope, key read-only). The
+    // ACL role is the operator-set ceiling; the key may only narrow it, never widen.
+    const role = getProjectRole(ctx.db, identity.userId, projectId);
+    if (!role) {
+      sendJson(res, 403, { error: 'API key is not scoped to this project' });
+      return;
+    }
+    if (!tokenCoversProject(ctx.db, identity.tokenId, projectId)) {
+      sendJson(res, 403, { error: 'this key is not scoped to this project' });
+      return;
+    }
+    if (req.method === 'POST') {
+      // Push. Requires write access at every layer.
+      if (role !== 'member') {
+        sendJson(res, 403, { error: 'read-only access for this project' });
+        return;
+      }
+      if (identity.readOnly) {
+        sendJson(res, 403, { error: 'this key is read-only' });
+        return;
+      }
     }
   }
 
@@ -126,4 +155,36 @@ export async function handleEventsProxy(
     'content-type': relayRes.headers.get('content-type') ?? 'application/json',
   });
   res.end(text);
+}
+
+/**
+ * Personal-memory discovery for the memorize client: resolve the API key to its
+ * account and return that account's personal-store id (provisioning one on first
+ * call). The client then syncs personal memory via the normal events route under
+ * this id. API-key authenticated — the CLI holds a key, not a browser cookie.
+ * Only an unscoped key qualifies (the personal-coverage rule); a project-scoped
+ * key cannot reach personal memory, so it is told so up front (403).
+ */
+export async function handlePersonalStore(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: ProxyContext,
+): Promise<void> {
+  const key = bearerToken(req);
+  if (!key) {
+    sendJson(res, 401, { error: 'missing or malformed Authorization bearer token' });
+    return;
+  }
+  const identity = identifyToken(ctx.db, key);
+  if (!identity) {
+    sendJson(res, 401, { error: 'invalid or revoked API key' });
+    return;
+  }
+  if (!tokenCoversPersonal(ctx.db, identity.tokenId)) {
+    sendJson(res, 403, { error: 'this key is not scoped for personal memory' });
+    return;
+  }
+  const { storeId } = getOrCreatePersonalStore(ctx.db, identity.userId);
+  touchToken(ctx.db, identity.tokenId);
+  sendJson(res, 200, { storeId, eventsUrl: `/v1/projects/${storeId}/events` });
 }

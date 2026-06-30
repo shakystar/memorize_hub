@@ -83,6 +83,22 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       CREATE INDEX IF NOT EXISTS idx_scopes_token ON token_scopes(token_id);
     `);
   },
+  // v4 — per-account personal memory store. A signed-in account owns exactly one
+  // opaque event log (its global, cross-project personal memory), keyed by
+  // store_id on the relay just like a project. Unlike a project it is NEVER
+  // grantable or shareable: only the owning account's keys reach it (enforced in
+  // the proxy's owner-only gate). This table holds only the account→store mapping;
+  // the events themselves live in the relay, opaque, exactly like project events.
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS personal_stores (
+        user_id    TEXT PRIMARY KEY REFERENCES users(id),
+        store_id   TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_store_id ON personal_stores(store_id);
+    `);
+  },
 ];
 
 function runMigrations(db: Database.Database): void {

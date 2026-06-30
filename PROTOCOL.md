@@ -148,6 +148,58 @@ key-wrapping path that would add Hub endpoints is deferred - it still requires
 out-of-band fingerprint verification, since a relay serving public keys is a
 man-in-the-middle vector.
 
+## Personal memory store (gateway control-plane extension)
+
+> **Implemented by the gateway, not the relay.** The relay knows nothing of
+> accounts or personal memory; a personal store is just another opaque event log
+> keyed by a path id. This section is documented here so the memorize client has
+> a single wire-contract source. A bare relay (no gateway) does not serve it.
+
+memorize keeps **global, cross-project personal memory** that must sync across a
+user's own machines but **never** leak into shared/project/team surfaces. The
+gateway models this as a per-account **personal store**: one opaque event log
+per account, owned by exactly one account and **never grantable or shared**.
+
+It rides the **same event contract** as a project — the `POST`/`GET
+/v1/projects/:storeId/events` endpoints above, byte-for-byte, including E2E
+payload encryption. Only the authorization axis differs (owner-only, below).
+
+### `GET /v1/account/personal-store`
+
+Resolve the caller's account (by API key) to its personal-store id, provisioning
+one on first call. The client then syncs personal memory via the events route
+under the returned id.
+
+- **Auth:** `Authorization: Bearer <api-key>` (the same participant key used for
+  project sync). The CLI holds a key, not a browser cookie.
+- Only an **unscoped** key qualifies. A key narrowed to a project subset cannot
+  reach personal memory and gets `403` here — mint an unscoped key for personal
+  sync.
+
+Response `200`:
+
+```jsonc
+{
+  "storeId": "psm_...",                       // relay path id for this account's personal memory
+  "eventsUrl": "/v1/projects/psm_.../events"  // convenience; the normal events route
+}
+```
+
+### Authorization (owner-only isolation)
+
+For a personal-store id, the gateway bypasses project ACL entirely and enforces:
+
+1. The key's account **owns** that personal store, else `403`. No account can
+   reach another's personal store — this is the privacy guarantee.
+2. The key is **unscoped** (`tokenCoversPersonal`), else `403`.
+3. `read_only` keys may pull but never push (`403` on `POST`), as for projects.
+
+The personal-store id namespace (`psm_…`) is **reserved**: the gateway refuses
+to grant or create an access request for an id in that shape, so a project can
+never shadow or be granted as a personal store. The client MUST treat the leak
+boundary as its own responsibility too — personal-scoped events go only to the
+personal store, never mixed into any project's push (memorize #181).
+
 ## Non-goals (v1)
 
 Conflict resolution, projection, HLC tie-break, semantic search - all live in
