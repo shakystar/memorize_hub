@@ -9,7 +9,12 @@ import { handleAdmin } from './dashboard.js';
 import { handleOAuthCallback } from './oauth-callback.js';
 import { handleDocs } from './docs.js';
 import { handleLanding } from './landing.js';
-import { handleEventsProxy, sendJson, type ProxyContext } from './proxy.js';
+import {
+  handleEventsProxy,
+  handlePersonalStore,
+  sendJson,
+  type ProxyContext,
+} from './proxy.js';
 
 const EVENTS_ROUTE = /^\/v1\/projects\/([^/]+)\/events$/;
 
@@ -73,6 +78,14 @@ export function createGatewayServer(options: GatewayServerOptions): Server {
         // Operator dashboard (GitHub-OAuth-gated; 503 if not configured).
         if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
           await handleAdmin(req, res, url, ctx);
+          return;
+        }
+
+        // Personal-memory discovery (API-key auth): resolve the caller's account
+        // to its personal-store id, provisioning one on first call. The client
+        // then syncs personal memory via the events route under that id.
+        if (req.method === 'GET' && url.pathname === '/v1/account/personal-store') {
+          await handlePersonalStore(req, res, ctx);
           return;
         }
 

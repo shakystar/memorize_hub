@@ -34,6 +34,18 @@ export function generateApiKey(): GeneratedApiKey {
 }
 
 /** Random id with a typed prefix, e.g. `tok_1a2b…`. */
-export function newId(kind: 'usr' | 'tok' | 'req'): string {
+export function newId(kind: 'usr' | 'tok' | 'req' | 'psm'): string {
   return `${kind}_${randomBytes(9).toString('base64url')}`;
+}
+
+/** Reserved path-id namespace for per-account personal-memory stores. */
+const PERSONAL_STORE_PREFIX = 'psm_';
+
+/**
+ * True for the reserved personal-store id namespace. Project ids in this shape
+ * are refused at the ACL/request layer so a project can never shadow or be
+ * granted as a personal store (keeping the owner-only isolation watertight).
+ */
+export function isPersonalStoreId(id: string): boolean {
+  return id.startsWith(PERSONAL_STORE_PREFIX);
 }

@@ -25,9 +25,15 @@ describe('gateway control-plane db', () => {
         .all() as { name: string }[];
       const names = tables.map((t) => t.name);
       expect(names).toEqual(
-        expect.arrayContaining(['users', 'api_tokens', 'project_acl', 'access_requests']),
+        expect.arrayContaining([
+          'users',
+          'api_tokens',
+          'project_acl',
+          'access_requests',
+          'personal_stores',
+        ]),
       );
-      expect(db.pragma('user_version', { simple: true })).toBe(3);
+      expect(db.pragma('user_version', { simple: true })).toBe(4);
     } finally {
       db.close();
     }
@@ -43,7 +49,7 @@ describe('gateway control-plane db', () => {
 
     const second = openGatewayDb(file);
     try {
-      expect(second.pragma('user_version', { simple: true })).toBe(3);
+      expect(second.pragma('user_version', { simple: true })).toBe(4);
       const row = second.prepare('SELECT email FROM users WHERE id = ?').get('u1') as
         | { email: string }
         | undefined;
