@@ -102,7 +102,17 @@ export function SharePopover({
           <Users /> Share
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 p-0">
+      <PopoverContent
+        align="end"
+        className="w-96 p-0"
+        onInteractOutside={(e) => {
+          // A nested menu (role dropdown) portals outside this popover; interacting
+          // with it must not dismiss the popover. Only real outside clicks close it.
+          if ((e.target as Element | null)?.closest('[data-radix-popper-content-wrapper]')) {
+            e.preventDefault();
+          }
+        }}
+      >
         <div className="p-3">
           {error && <p className="mb-2 text-xs text-destructive">{error}</p>}
           <p className="mb-1 text-xs font-medium text-muted-foreground">People with access</p>
