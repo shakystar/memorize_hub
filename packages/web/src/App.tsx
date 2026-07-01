@@ -40,7 +40,7 @@ function Sidebar({
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-card">
       <div className="flex items-center gap-2 px-4 py-3">
         <span className="font-semibold">
-          memorize <span className="text-muted-foreground">Hub</span>
+          Memorize <span className="text-muted-foreground">Hub</span>
         </span>
       </div>
 
@@ -273,7 +273,7 @@ export default function App() {
   if (me === null) {
     return (
       <CenteredCard>
-        <h1 className="text-lg font-semibold">memorize Hub</h1>
+        <h1 className="text-lg font-semibold">Memorize Hub</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Sign in with Google to manage workspaces and sync your memory.
         </p>
