@@ -11,14 +11,22 @@ import {
   tokenBelongsToAccount,
   type TokenSummary,
 } from './keys.js';
-import { mintInvite as dalMintInvite, redeemInvite } from './invites.js';
+import {
+  listInvites as dalListInvites,
+  mintInvite as dalMintInvite,
+  redeemInvite,
+  revokeInvite as dalRevokeInvite,
+} from './invites.js';
 import { getOrCreatePersonalStore } from './personal-store.js';
 import {
   createStore,
+  deleteStore,
   getStore,
   listAccountStores,
   memberRole,
   removeMember as dalRemoveMember,
+  roster,
+  setRole as dalSetRole,
   type AccountStore,
 } from './stores.js';
 import {
@@ -274,6 +282,11 @@ export async function handleAccount(
     sendAccount(res, 200, session, 'keys', keysSection(ctx, session, origin));
     return;
   }
+  const wsDetailGet = /^\/account\/workspaces\/([^/]+)$/.exec(path);
+  if (req.method === 'GET' && wsDetailGet) {
+    if (!session) return redirect(res, '/account');
+    return sendWorkspaceDetail(res, 200, ctx, session, decodeURIComponent(wsDetailGet[1]!));
+  }
 
   // --- authenticated mutations (each re-renders its own section) ---
   if (!session) {
@@ -311,12 +324,68 @@ export async function handleAccount(
   if (req.method === 'POST' && inviteMatch) {
     const storeId = decodeURIComponent(inviteMatch[1]!);
     if (memberRole(db, storeId, session.accountId) !== 'owner') {
-      const content = workspacesSection(ctx, session, { notice: 'Only an owner can invite.' });
-      return sendAccount(res, 403, session, 'workspaces', content);
+      return sendWorkspaceDetail(res, 403, ctx, session, storeId, { notice: 'Only an owner can invite.' });
     }
     const minted = dalMintInvite(db, storeId, session.accountId, {});
     const joinUrl = `${origin}/join?token=${encodeURIComponent(minted.token)}`;
-    return sendAccount(res, 201, session, 'workspaces', workspacesSection(ctx, session, { inviteJoinUrl: joinUrl }));
+    return sendWorkspaceDetail(res, 201, ctx, session, storeId, { inviteJoinUrl: joinUrl });
+  }
+
+  // Revoke an invite (owner).
+  const invRevoke = /^\/account\/workspaces\/([^/]+)\/invites\/([^/]+)\/revoke$/.exec(path);
+  if (req.method === 'POST' && invRevoke) {
+    const storeId = decodeURIComponent(invRevoke[1]!);
+    const inviteId = decodeURIComponent(invRevoke[2]!);
+    if (memberRole(db, storeId, session.accountId) !== 'owner') {
+      return sendWorkspaceDetail(res, 403, ctx, session, storeId, { notice: 'Only an owner can revoke invites.' });
+    }
+    dalRevokeInvite(db, storeId, inviteId);
+    return sendWorkspaceDetail(res, 200, ctx, session, storeId, { notice: 'Invite revoked.' });
+  }
+
+  // Change a member's role (owner; ownership transfer via promote).
+  const roleMatch = /^\/account\/workspaces\/([^/]+)\/members\/([^/]+)\/role$/.exec(path);
+  if (req.method === 'POST' && roleMatch) {
+    const storeId = decodeURIComponent(roleMatch[1]!);
+    const target = decodeURIComponent(roleMatch[2]!);
+    if (memberRole(db, storeId, session.accountId) !== 'owner') {
+      return sendWorkspaceDetail(res, 403, ctx, session, storeId, { notice: 'Only an owner can change roles.' });
+    }
+    const form = await readForm(req).catch(() => null);
+    const newRole = form?.get('role');
+    if (newRole !== 'owner' && newRole !== 'member') {
+      return sendWorkspaceDetail(res, 400, ctx, session, storeId, { notice: 'Invalid role.' });
+    }
+    const result = dalSetRole(db, storeId, target, newRole);
+    const notice = result.ok
+      ? 'Role updated.'
+      : result.reason === 'last_owner'
+        ? 'Cannot demote the sole remaining owner — promote another member first.'
+        : 'That account is not a member.';
+    return sendWorkspaceDetail(res, result.ok ? 200 : 409, ctx, session, storeId, { notice });
+  }
+
+  // Remove a member (owner removes anyone; a member removes self = leave).
+  const memRemove = /^\/account\/workspaces\/([^/]+)\/members\/([^/]+)\/remove$/.exec(path);
+  if (req.method === 'POST' && memRemove) {
+    const storeId = decodeURIComponent(memRemove[1]!);
+    const target = decodeURIComponent(memRemove[2]!);
+    const callerRole = memberRole(db, storeId, session.accountId);
+    if (!callerRole) return sendWorkspaceDetail(res, 404, ctx, session, storeId);
+    const isSelf = target === session.accountId;
+    if (!isSelf && callerRole !== 'owner') {
+      return sendWorkspaceDetail(res, 403, ctx, session, storeId, { notice: 'Only an owner can remove another member.' });
+    }
+    const result = dalRemoveMember(db, storeId, target);
+    if (!result.ok && result.reason === 'last_owner') {
+      return sendWorkspaceDetail(res, 409, ctx, session, storeId, {
+        notice: 'The last owner cannot be removed — transfer ownership or delete the workspace.',
+      });
+    }
+    // A successful self-removal means the detail page is gone; go back to the list.
+    if (isSelf && result.ok) return redirect(res, '/account/workspaces');
+    const notice = result.ok ? 'Member removed.' : 'That account is not a member.';
+    return sendWorkspaceDetail(res, result.ok ? 200 : 404, ctx, session, storeId, { notice });
   }
 
   // Leave a workspace (self-leave). The last owner must transfer or delete first.
@@ -325,13 +394,22 @@ export async function handleAccount(
     const storeId = decodeURIComponent(leaveMatch[1]!);
     const result = dalRemoveMember(db, storeId, session.accountId);
     if (!result.ok && result.reason === 'last_owner') {
-      const content = workspacesSection(ctx, session, {
+      return sendWorkspaceDetail(res, 409, ctx, session, storeId, {
         notice: 'You are the last owner — transfer ownership or delete the workspace first.',
       });
-      return sendAccount(res, 409, session, 'workspaces', content);
     }
-    const notice = result.ok ? 'Left the workspace.' : 'You are not a member of that workspace.';
-    return sendAccount(res, 200, session, 'workspaces', workspacesSection(ctx, session, { notice }));
+    return redirect(res, '/account/workspaces');
+  }
+
+  // Delete a workspace (owner teardown).
+  const wsDelete = /^\/account\/workspaces\/([^/]+)\/delete$/.exec(path);
+  if (req.method === 'POST' && wsDelete) {
+    const storeId = decodeURIComponent(wsDelete[1]!);
+    if (memberRole(db, storeId, session.accountId) !== 'owner') {
+      return sendWorkspaceDetail(res, 403, ctx, session, storeId, { notice: 'Only an owner can delete the workspace.' });
+    }
+    deleteStore(db, storeId);
+    return redirect(res, '/account/workspaces');
   }
 
   const revokeMatch = /^\/account\/keys\/([^/]+)\/revoke$/.exec(path);
@@ -485,6 +563,129 @@ ${copyScript()}`;
 }
 
 /**
+ * Workspace detail: members (owner manages roles + removal), invites (owner lists,
+ * mints, revokes), and settings (leave / delete). Returns null if the caller is not
+ * a member, so the handler can answer 404 (existence-leak, README §5).
+ */
+function workspaceDetailSection(
+  ctx: GatewayContext,
+  session: AccountSession,
+  storeId: string,
+  flash: AccountFlash = {},
+): string | null {
+  const role = memberRole(ctx.db, storeId, session.accountId);
+  if (!role) return null;
+  const store = getStore(ctx.db, storeId);
+  if (!store) return null;
+  const isOwner = role === 'owner';
+  const idEnc = encodeURIComponent(storeId);
+  const notice = flash.notice ? noticeBox(flash.notice) : '';
+  const invite = flash.inviteJoinUrl ? inviteBox(flash.inviteJoinUrl) : '';
+  const name = store.name ? htmlEscape(store.name) : htmlEscape(storeId);
+  const kind = store.inviteReachable ? 'shared' : 'private';
+
+  const memberRows = roster(ctx.db, storeId)
+    .map((m) => {
+      const who = m.githubLogin
+        ? `@${htmlEscape(m.githubLogin)}`
+        : `<code class="font-mono text-fg-muted">${htmlEscape(m.accountId)}</code>`;
+      const self = m.accountId === session.accountId ? ' <span class="text-fg-muted">(you)</span>' : '';
+      let controls = '';
+      if (isOwner) {
+        const accEnc = encodeURIComponent(m.accountId);
+        const toggle =
+          m.role === 'owner'
+            ? `<button name="role" value="member" class="btn text-sm">Make member</button>`
+            : `<button name="role" value="owner" class="btn text-sm">Make owner</button>`;
+        const roleForm = `<form method="POST" action="/account/workspaces/${idEnc}/members/${accEnc}/role" class="inline m-0">${toggle}</form>`;
+        const removeLabel = m.accountId === session.accountId ? 'Leave' : 'Remove';
+        const removeForm = `<form method="POST" action="/account/workspaces/${idEnc}/members/${accEnc}/remove" class="inline m-0" onsubmit="return confirm('${removeLabel} this member?')"><button class="btn text-sm">${removeLabel}</button></form>`;
+        controls = `<div class="flex justify-end gap-2">${roleForm}${removeForm}</div>`;
+      }
+      return `<tr class="border-t border-default">
+ <td class="py-2 pr-4">${who}${self}</td>
+ <td class="py-2 pr-4">${m.role === 'owner' ? '<span class="text-fg">owner</span>' : 'member'}</td>
+ <td class="py-2 pr-4 text-fg-muted">${htmlEscape(m.joinedAt)}</td>
+ <td class="py-2">${controls}</td></tr>`;
+    })
+    .join('');
+  const membersTable = `<div class="mt-2 overflow-x-auto"><table class="w-full text-sm">
+ <thead><tr class="text-left text-fg-muted"><th class="pb-1 pr-4 font-medium">member</th>
+  <th class="pb-1 pr-4 font-medium">role</th><th class="pb-1 pr-4 font-medium">joined</th>
+  <th class="pb-1 font-medium"></th></tr></thead>
+ <tbody>${memberRows}</tbody></table></div>`;
+
+  let invitesBlock = '';
+  if (isOwner) {
+    const active = dalListInvites(ctx.db, storeId).filter(
+      (i) =>
+        !i.revokedAt &&
+        (!i.expiresAt || Date.parse(i.expiresAt) > Date.now()) &&
+        (i.maxUses === null || i.usedCount < i.maxUses),
+    );
+    const invTable = active.length
+      ? `<div class="mt-2 overflow-x-auto"><table class="w-full text-sm">
+ <thead><tr class="text-left text-fg-muted"><th class="pb-1 pr-4 font-medium">invite id</th>
+  <th class="pb-1 pr-4 font-medium">uses</th><th class="pb-1 pr-4 font-medium">expires</th>
+  <th class="pb-1 font-medium"></th></tr></thead><tbody>${active
+          .map(
+            (i) => `<tr class="border-t border-default">
+ <td class="py-2 pr-4"><code class="font-mono text-fg-muted">${htmlEscape(i.inviteId)}</code></td>
+ <td class="py-2 pr-4 text-fg-muted">${i.maxUses === null ? `${i.usedCount} / unlimited` : `${i.usedCount} / ${i.maxUses}`}</td>
+ <td class="py-2 pr-4 text-fg-muted">${i.expiresAt ? htmlEscape(i.expiresAt) : 'never'}</td>
+ <td class="py-2 text-right"><form method="POST" action="/account/workspaces/${idEnc}/invites/${encodeURIComponent(i.inviteId)}/revoke" class="inline m-0"><button class="btn text-sm">Revoke</button></form></td></tr>`,
+          )
+          .join('')}</tbody></table></div>`
+      : '<p class="mt-2 text-sm prose-muted">No active invites.</p>';
+    invitesBlock = `<h3 class="mt-8 text-base font-semibold">Invites</h3>
+<p class="mt-1 text-sm prose-muted">Anyone with an active invite link can join as a member.</p>
+${invTable}
+<form method="POST" action="/account/workspaces/${idEnc}/invite" class="mt-3"><button class="btn btn-primary" type="submit">Create invite link</button></form>`;
+  }
+
+  const deleteBtn = isOwner
+    ? `<form method="POST" action="/account/workspaces/${idEnc}/delete" class="inline m-0" onsubmit="return confirm('Delete this workspace? Members lose access. This cannot be undone.')"><button class="btn border-danger text-sm text-danger">Delete workspace</button></form>`
+    : '';
+  const leaveBtn = `<form method="POST" action="/account/workspaces/${idEnc}/leave" class="inline m-0" onsubmit="return confirm('Leave this workspace?')"><button class="btn text-sm">Leave workspace</button></form>`;
+
+  return `<p class="text-sm"><a href="/account/workspaces" class="text-fg-muted hover:text-fg hover:no-underline">&lt;- Workspaces</a></p>
+<div class="mt-1 flex items-center gap-3">
+ <h2 class="text-xl font-bold">${name}</h2>
+ <span class="text-xs text-fg-muted">${kind}</span>
+</div>
+<p class="mt-1 text-sm prose-muted"><code class="font-mono">${htmlEscape(storeId)}</code> · your role: ${htmlEscape(role)}</p>
+${notice}${invite}
+<h3 class="mt-8 text-base font-semibold">Members</h3>
+${membersTable}
+${invitesBlock}
+<h3 class="mt-8 text-base font-semibold">Settings</h3>
+<div class="mt-2 flex flex-wrap gap-2">${leaveBtn}${deleteBtn}</div>
+${copyScript()}`;
+}
+
+/** Render the workspace detail inside the account shell; 404 if not a member. */
+function sendWorkspaceDetail(
+  res: ServerResponse,
+  status: number,
+  ctx: GatewayContext,
+  session: AccountSession,
+  storeId: string,
+  flash: AccountFlash = {},
+): void {
+  const content = workspaceDetailSection(ctx, session, storeId, flash);
+  if (content === null) {
+    const nf = accountShell(
+      session,
+      'workspaces',
+      '<h2 class="text-xl font-bold">Not found</h2><p class="mt-2 text-sm prose-muted">This workspace does not exist or you are not a member.</p><p class="mt-4"><a href="/account/workspaces" class="text-accent hover:underline">Back to workspaces</a></p>',
+    );
+    sendHtml(res, 404, layout({ title: 'memorize Hub — account', body: nf, user: session, wide: true }));
+    return;
+  }
+  sendAccount(res, status, session, 'workspaces', content);
+}
+
+/**
  * The account's ACTIVE keys as a table, each with a revoke action. Revoked keys
  * are hidden from the list (their row is kept in the DB for security/audit, and
  * the server rejects them at auth) — revoke is a soft-delete, not a row deletion.
@@ -515,33 +716,27 @@ function keysView(tokens: TokenSummary[]): string {
  <tbody>${rows}</tbody></table></div>`;
 }
 
-/** The account's workspaces (private + shared) as a table. */
+/** The account's workspaces (private + shared) as a table; each row opens detail. */
 function workspacesView(workspaces: AccountStore[]): string {
   if (workspaces.length === 0) {
     return '<p class="mt-2 text-sm prose-muted">No workspaces yet. Create one below — a workspace with one member is just a private project.</p>';
   }
   const rows = workspaces
     .map((w) => {
-      const kind = w.inviteReachable
-        ? `<span class="text-fg-muted">shared</span>`
-        : `<span class="text-fg-muted">private</span>`;
-      const name = w.name ? htmlEscape(w.name) : '<span class="text-fg-muted">—</span>';
-      const role = w.role === 'owner' ? '<span class="text-fg">owner</span>' : 'member';
+      const kind = w.inviteReachable ? 'shared' : 'private';
       const id = htmlEscape(w.storeId);
-      const invite =
-        w.role === 'owner'
-          ? `<form method="POST" action="/account/workspaces/${id}/invite" class="inline m-0">
-   <button class="btn text-sm">Invite</button></form>`
-          : '';
-      const leave = `<form method="POST" action="/account/workspaces/${id}/leave" class="inline m-0">
-   <button class="btn text-sm">Leave</button></form>`;
+      const href = `/account/workspaces/${encodeURIComponent(w.storeId)}`;
+      const name = w.name
+        ? `<a href="${href}" class="font-medium text-accent hover:underline">${htmlEscape(w.name)}</a>`
+        : `<a href="${href}" class="text-accent hover:underline">${id}</a>`;
+      const role = w.role === 'owner' ? '<span class="text-fg">owner</span>' : 'member';
       return `<tr class="border-t border-default">
  <td class="py-2 pr-4">${name}</td>
- <td class="py-2 pr-4"><code class="font-mono">${id}</code></td>
+ <td class="py-2 pr-4"><code class="font-mono text-fg-muted">${id}</code></td>
  <td class="py-2 pr-4">${role}</td>
- <td class="py-2 pr-4">${kind}</td>
+ <td class="py-2 pr-4 text-fg-muted">${kind}</td>
  <td class="py-2 pr-4 text-fg-muted">${w.memberCount}</td>
- <td class="py-2"><div class="flex gap-2">${invite}${leave}</div></td></tr>`;
+ <td class="py-2 text-right"><a href="${href}" class="text-sm text-fg-muted hover:text-fg hover:no-underline">Manage -&gt;</a></td></tr>`;
     })
     .join('');
   return `<div class="mt-2 overflow-x-auto"><table class="w-full text-sm">
