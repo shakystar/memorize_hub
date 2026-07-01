@@ -542,7 +542,7 @@ function renderAccounts(session: AccountSession, accounts: AccountSummary[]): st
 </table></div>`;
 
   return operatorLayout({
-    title: 'memorize Hub — Operator · Accounts',
+    title: 'Memorize Hub — Operator · Accounts',
     email: session.email,
     nav: operatorNav('accounts'),
     body,
@@ -601,7 +601,7 @@ function renderBilling(session: AccountSession, b: Billing): string {
  store's creator (+ the account's personal store).${b.relayReachable ? '' : ' Stored sizes hidden — relay unreachable.'}</p>`;
 
   return operatorLayout({
-    title: 'memorize Hub — Operator · Billing',
+    title: 'Memorize Hub — Operator · Billing',
     email: session.email,
     nav: operatorNav('billing'),
     body,
