@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { WorkspaceScopeSelect } from '@/components/WorkspaceScopeSelect';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -104,7 +105,7 @@ export function AccountSettings({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl gap-0 p-0">
+      <DialogContent className="gap-0 p-0 sm:max-w-5xl">
         <div className="border-b border-border px-6 py-4">
           <DialogTitle>Account</DialogTitle>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -187,18 +188,13 @@ export function AccountSettings({
                     onChange={(e) => setLabel(e.target.value)}
                   />
                   {workspaces.length > 0 && (
-                    <div className="space-y-1">
-                      {workspaces.map((w) => (
-                        <label key={w.workspaceId} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={scopes.has(w.workspaceId)}
-                            onChange={() => toggleScope(w.workspaceId)}
-                          />
-                          <span className="font-mono text-xs">{w.workspaceId}</span>
-                          {w.name && <span className="text-muted-foreground">({w.name})</span>}
-                        </label>
-                      ))}
+                    <div>
+                      <span className="mb-1 block text-xs text-muted-foreground">Scope</span>
+                      <WorkspaceScopeSelect
+                        workspaces={workspaces}
+                        selected={scopes}
+                        onToggle={toggleScope}
+                      />
                     </div>
                   )}
                   <label className="flex items-center gap-2 text-sm">

@@ -108,7 +108,7 @@ export function WorkspaceSettings({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl gap-0 p-0">
+      <DialogContent className="gap-0 p-0 sm:max-w-5xl">
         <div className="border-b border-border px-6 py-4">
           <DialogTitle>{name}</DialogTitle>
           <p className="mt-0.5 text-xs text-muted-foreground">
