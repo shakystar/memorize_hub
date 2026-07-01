@@ -90,33 +90,3 @@ export function readAccount(
   const token = parseCookies(cookieHeader)[ACCOUNT_COOKIE];
   return verifyValue<AccountSession>(token, secret);
 }
-
-/**
- * Operator session — a GitHub account on the admin allowlist. Separate cookie,
- * scoped to Path=/admin, so operating the dashboard is distinct from a plain
- * account session. Ported for the /admin surface (built in a later slice).
- */
-export interface OperatorSession {
-  login: string;
-  exp: number;
-}
-
-const OPERATOR_COOKIE = 'hub_op';
-
-export function operatorCookie(login: string, secret: string): string {
-  const session: OperatorSession = { login, exp: Date.now() + SESSION_TTL_MS };
-  const value = signValue(session, secret);
-  return `${OPERATOR_COOKIE}=${value}; Path=/admin; HttpOnly; SameSite=Lax; Secure; Max-Age=${SESSION_TTL_MS / 1000}`;
-}
-
-export function clearOperatorCookie(): string {
-  return `${OPERATOR_COOKIE}=; Path=/admin; HttpOnly; SameSite=Lax; Secure; Max-Age=0`;
-}
-
-export function readOperator(
-  cookieHeader: string | undefined,
-  secret: string,
-): OperatorSession | null {
-  const token = parseCookies(cookieHeader)[OPERATOR_COOKIE];
-  return verifyValue<OperatorSession>(token, secret);
-}

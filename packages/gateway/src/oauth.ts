@@ -4,11 +4,12 @@ import type { GatewayConfig } from './config.js';
 import { signValue, verifyValue } from './session.js';
 
 /**
- * Minimal GitHub OAuth (authorization code), shared by two flows: account
- * self-service login and the operator dashboard. Both use ONE callback path,
+ * Minimal GitHub OAuth (authorization code) for account self-service login. The
+ * operator dashboard reuses this SAME account session — an allowlist check gates
+ * `/admin`, with no separate operator login or cookie. One callback path,
  * `/oauth/callback`, so a single GitHub OAuth App registers exactly that URL — no
- * reliance on GitHub's sub-directory redirect_uri matching. The flow is carried
- * in the signed `state` and dispatched at the shared callback (see web.ts).
+ * reliance on GitHub's sub-directory redirect_uri matching. The (single) flow is
+ * carried in the signed `state` and dispatched at the shared callback (see web.ts).
  */
 
 const AUTHORIZE = 'https://github.com/login/oauth/authorize';
@@ -23,7 +24,7 @@ export const CALLBACK_PATH = '/oauth/callback';
 const COOKIE_PATH = '/oauth';
 const DEFAULT_SCOPE = 'read:user';
 
-export type OAuthFlow = 'admin' | 'account';
+export type OAuthFlow = 'account';
 
 export function callbackUrl(config: GatewayConfig): string {
   return `${config.publicUrl}${CALLBACK_PATH}`;
@@ -73,7 +74,7 @@ export function verifyCallback(
 ): CallbackState | null {
   if (!returnedState || !cookieState || returnedState !== cookieState) return null;
   const payload = verifyValue<{ flow?: OAuthFlow }>(returnedState, secret);
-  if (!payload || (payload.flow !== 'admin' && payload.flow !== 'account')) return null;
+  if (!payload || payload.flow !== 'account') return null;
   return { flow: payload.flow };
 }
 
