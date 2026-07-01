@@ -3,6 +3,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { upsertAccountByGithub } from './accounts.js';
 import { adminEnabled, sessionLoginEnabled } from './config.js';
 import type { GatewayContext } from './context.js';
+import { readBody } from './http.js';
+import {
+  issueApiKey,
+  listAccountTokens,
+  revokeToken,
+  tokenBelongsToAccount,
+  type TokenSummary,
+} from './keys.js';
 import { getOrCreatePersonalStore } from './personal-store.js';
 import {
   beginLogin,
@@ -190,13 +198,13 @@ export async function handleOAuthCallback(
 
 /* ------------------------------------------------------------------ account --- */
 
-export function handleAccount(
+export async function handleAccount(
   req: IncomingMessage,
   res: ServerResponse,
   ctx: GatewayContext,
   url: URL,
-): void {
-  const { config } = ctx;
+): Promise<void> {
+  const { config, db } = ctx;
   if (!sessionLoginEnabled(config)) {
     sendHtml(res, 503, page(
       'Accounts not configured',
@@ -206,6 +214,7 @@ export function handleAccount(
   }
   const secret = config.sessionSecret!;
   const path = url.pathname;
+  const origin = originFor(req, config);
 
   if (req.method === 'GET' && path === '/account/login') {
     const { redirectTo, setCookie } = beginLogin(config, { flow: 'account', scope: ACCOUNT_SCOPE });
@@ -219,15 +228,43 @@ export function handleAccount(
 
   const session = readAccount(req.headers.cookie, secret);
   if (req.method === 'GET' && (path === '/account' || path === '/account/')) {
-    const body = session ? signedInView(ctx, session, originFor(req, config)) : signedOutView();
+    const body = session ? signedInView(ctx, session, origin) : signedOutView();
     sendHtml(res, 200, layout({ title: 'memorize Hub — account', body, user: session }));
     return;
   }
-  // POST surfaces (key issuance, workspaces) land in later slices.
+
+  // Authenticated mutations below.
   if (!session) {
     redirect(res, '/account');
     return;
   }
+
+  // Mint a new API key. In S2 keys are unscoped (they reach personal memory and,
+  // once granted, every workspace); a read-only checkbox is the only narrowing.
+  // Per-workspace scoping arrives with the workspace UI (S3).
+  if (req.method === 'POST' && path === '/account/keys') {
+    const form = await readForm(req).catch(() => null);
+    const readOnly = form?.get('readonly') === '1';
+    const { plaintext } = issueApiKey(db, session.accountId, session.login, { readOnly });
+    const body = signedInView(ctx, session, origin, { issuedKey: plaintext });
+    sendHtml(res, 201, layout({ title: 'memorize Hub — account', body, user: session }));
+    return;
+  }
+
+  const revokeMatch = /^\/account\/keys\/([^/]+)\/revoke$/.exec(path);
+  if (req.method === 'POST' && revokeMatch) {
+    const tokenId = decodeURIComponent(revokeMatch[1]!);
+    if (!tokenBelongsToAccount(db, tokenId, session.accountId)) {
+      const body = signedInView(ctx, session, origin, { notice: 'That key is not yours.' });
+      sendHtml(res, 403, layout({ title: 'memorize Hub — account', body, user: session }));
+      return;
+    }
+    revokeToken(db, tokenId);
+    const body = signedInView(ctx, session, origin, { notice: 'Key revoked.' });
+    sendHtml(res, 200, layout({ title: 'memorize Hub — account', body, user: session }));
+    return;
+  }
+
   sendHtml(res, 404, page('Not found', ''));
 }
 
@@ -238,14 +275,40 @@ function signedOutView(): string {
 <p class="mt-6"><a class="btn btn-primary" href="/account/login">Sign in with GitHub</a></p>`;
 }
 
-function signedInView(ctx: GatewayContext, session: AccountSession, origin: string): string {
+interface AccountFlash {
+  /** A freshly minted key, shown exactly once. */
+  issuedKey?: string;
+  /** A one-line status message (revoke, error). */
+  notice?: string;
+}
+
+function signedInView(
+  ctx: GatewayContext,
+  session: AccountSession,
+  origin: string,
+  flash: AccountFlash = {},
+): string {
   const personal = getOrCreatePersonalStore(ctx.db, session.accountId);
+  const tokens = listAccountTokens(ctx.db, session.accountId);
+  const notice = flash.notice
+    ? `<p class="mt-4 rounded-md border border-default bg-canvas-subtle px-4 py-2 text-sm">${flash.notice}</p>`
+    : '';
+  const issued = flash.issuedKey
+    ? `<div class="mt-4 rounded-lg border border-attention-border bg-attention-subtle p-4">
+ <p class="text-sm font-semibold">New API key — copy it now, it is shown only once:</p>
+ <code class="mt-2 block overflow-x-auto whitespace-nowrap rounded-md border border-default bg-canvas-inset px-3 py-2 text-sm font-mono">${htmlEscape(flash.issuedKey)}</code>
+ <p class="mt-3 text-sm prose-muted">Log in once per host with it, then clone token-free:</p>
+ ${cmdBlock(`memorize auth login --remote-url ${origin} --token ${flash.issuedKey}`)}
+</div>`
+    : '';
+
   return `<div class="flex items-center justify-between gap-4">
  <h1 class="text-2xl font-bold">Your account</h1>
  <a href="/account/logout" class="text-sm text-fg-muted hover:text-fg hover:no-underline">Sign out</a>
 </div>
 <p class="mt-1 text-sm prose-muted">Signed in as <code class="font-mono">@${htmlEscape(session.login)}</code>
  (<code class="font-mono">${htmlEscape(session.email)}</code>)</p>
+${notice}${issued}
 
 <h2 class="mt-8 text-lg font-semibold">Personal memory</h2>
 <div class="card mt-2">
@@ -255,11 +318,57 @@ function signedInView(ctx: GatewayContext, session: AccountSession, origin: stri
  <p class="mt-3 text-sm">Personal store id: <code class="font-mono">${htmlEscape(personal.storeId)}</code></p>
 </div>
 
+<h2 class="mt-8 text-lg font-semibold">API keys</h2>
+${keysView(tokens)}
+${generateKeyForm()}
+
 <h2 class="mt-8 text-lg font-semibold">Connect a machine</h2>
-<p class="mt-1 text-sm prose-muted">Key issuance lands in the next slice. Once you have a
- key, log in once per host, then clone token-free:</p>
+<p class="mt-1 text-sm prose-muted">Generate a key above, then log in once per host and
+ clone token-free. Use <code class="font-mono">clone</code>, not
+ <code class="font-mono">init</code> — <code class="font-mono">init</code> forks a new empty
+ project that will not sync. Requires memorize 2.5.0+.</p>
 ${cmdBlock(`memorize auth login --remote-url ${origin} --token YOUR_KEY`)}
+${cmdBlock(`memorize project clone PROJECT_ID --remote-url ${origin}`)}
 ${copyScript()}`;
+}
+
+/** The account's keys as a table, each with a revoke action. */
+function keysView(tokens: TokenSummary[]): string {
+  if (tokens.length === 0) return '<p class="mt-2 text-sm prose-muted">No keys yet.</p>';
+  const rows = tokens
+    .map((t) => {
+      const status = t.revokedAt
+        ? '<span class="text-fg-muted">revoked</span>'
+        : `<form method="POST" action="/account/keys/${htmlEscape(t.id)}/revoke" class="m-0">
+ <button class="btn text-sm">Revoke</button></form>`;
+      const used = t.lastUsedAt ? htmlEscape(t.lastUsedAt) : 'never';
+      const ro = t.readOnly ? ' <span class="text-fg-muted">(read-only)</span>' : '';
+      const scope = t.scopes.length === 0 ? 'all stores' : t.scopes.map(htmlEscape).join(', ');
+      return `<tr class="border-t border-default">
+ <td class="py-2 pr-4"><code class="font-mono">${htmlEscape(t.prefix)}…</code>${ro}</td>
+ <td class="py-2 pr-4 text-fg-muted">${htmlEscape(t.label ?? '')}</td>
+ <td class="py-2 pr-4 text-fg-muted">${scope}</td>
+ <td class="py-2 pr-4 text-fg-muted">${used}</td>
+ <td class="py-2">${status}</td></tr>`;
+    })
+    .join('');
+  return `<div class="mt-2 overflow-x-auto"><table class="w-full text-sm">
+ <thead><tr class="text-left text-fg-muted">
+  <th class="pb-1 pr-4 font-medium">key</th><th class="pb-1 pr-4 font-medium">label</th>
+  <th class="pb-1 pr-4 font-medium">scope</th><th class="pb-1 pr-4 font-medium">last used</th>
+  <th class="pb-1 font-medium"></th></tr></thead>
+ <tbody>${rows}</tbody></table></div>`;
+}
+
+/** The mint-a-key form. S2: unscoped only, with an optional read-only toggle. */
+function generateKeyForm(): string {
+  return `<form method="POST" action="/account/keys" class="mt-4">
+ <p class="text-sm prose-muted">Mint a key for your machines. An unscoped key syncs your
+  personal memory and every workspace you belong to.</p>
+ <label class="mt-3 flex items-center gap-2 text-sm">
+  <input type="checkbox" name="readonly" value="1"> read-only key (pull only)</label>
+ <button class="btn btn-primary mt-3" type="submit">Generate a new key</button>
+</form>`;
 }
 
 /* -------------------------------------------------------------------- admin --- */
@@ -303,4 +412,12 @@ function page(title: string, bodyHtml: string): string {
 function readNavUser(req: IncomingMessage, ctx: GatewayContext): AccountSession | null {
   if (!ctx.config.sessionSecret) return null;
   return readAccount(req.headers.cookie, ctx.config.sessionSecret);
+}
+
+const MAX_FORM_BYTES = 16 * 1024;
+
+/** Parse an `application/x-www-form-urlencoded` POST body (bounded). */
+async function readForm(req: IncomingMessage): Promise<URLSearchParams> {
+  const body = await readBody(req, MAX_FORM_BYTES);
+  return new URLSearchParams(body.toString('utf8'));
 }

@@ -101,6 +101,55 @@ export function listTokenScopes(db: Database.Database, tokenId: string): string[
   ).map((r) => r.store_id);
 }
 
+export interface TokenSummary {
+  id: string;
+  prefix: string;
+  label: string | null;
+  readOnly: boolean;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  /** Store ids this key is narrowed to; empty = unscoped (all the account's stores). */
+  scopes: string[];
+}
+
+/** All of an account's keys (newest first), with scope + status, for the /account UI. */
+export function listAccountTokens(db: Database.Database, accountId: string): TokenSummary[] {
+  const rows = db
+    .prepare(
+      `SELECT id, prefix, label, read_only, revoked_at, last_used_at
+         FROM api_tokens WHERE account_id = ? ORDER BY created_at DESC`,
+    )
+    .all(accountId) as Array<{
+    id: string;
+    prefix: string;
+    label: string | null;
+    read_only: number;
+    revoked_at: string | null;
+    last_used_at: string | null;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    prefix: r.prefix,
+    label: r.label,
+    readOnly: r.read_only === 1,
+    revokedAt: r.revoked_at,
+    lastUsedAt: r.last_used_at,
+    scopes: listTokenScopes(db, r.id),
+  }));
+}
+
+/** True if the token exists and belongs to this account (revoke authorization). */
+export function tokenBelongsToAccount(
+  db: Database.Database,
+  tokenId: string,
+  accountId: string,
+): boolean {
+  const row = db
+    .prepare('SELECT 1 FROM api_tokens WHERE id = ? AND account_id = ?')
+    .get(tokenId, accountId);
+  return row !== undefined;
+}
+
 /** Revoke a token by id; returns true if a live token was revoked. */
 export function revokeToken(db: Database.Database, tokenId: string): boolean {
   const result = db

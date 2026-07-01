@@ -58,8 +58,8 @@ describe('gateway skeleton', () => {
     expect(res.status).toBe(501);
   });
 
-  it('routes the events data-plane path to the proxy (501 until ported)', async () => {
+  it('routes the events data-plane path to the proxy (401 without a key)', async () => {
     const res = await fetch(`${base}/v1/projects/wsp_abc/events`);
-    expect(res.status).toBe(501);
+    expect(res.status).toBe(401);
   });
 });
