@@ -1,9 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { upsertAccountByGoogle } from './accounts.js';
+import {
+  approveDevice,
+  findPendingByUserCode,
+  normalizeUserCode,
+  type PendingDevice,
+} from './device.js';
 import { adminEnabled, sessionLoginEnabled } from './config.js';
 import type { GatewayContext } from './context.js';
-import { sendError, sendJson } from './http.js';
+import { readBody, sendError, sendJson } from './http.js';
 import { redeemInvite } from './invites.js';
 import { getOrCreatePersonalStore } from './personal-store.js';
 import { getStore } from './stores.js';
@@ -19,6 +25,8 @@ import {
   clearAccountCookie,
   parseCookies,
   readAccount,
+  signValue,
+  verifyValue,
   type AccountSession,
 } from './session.js';
 import {
@@ -62,6 +70,15 @@ function setJoinCookie(token: string): string {
 }
 function clearJoinCookie(): string {
   return `${JOIN_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`;
+}
+
+/** Short-lived cookie carrying a local return path across OAuth login (e.g. /device). */
+const RETURN_COOKIE = 'hub_return';
+function setReturnCookie(path: string): string {
+  return `${RETURN_COOKIE}=${encodeURIComponent(path)}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=600`;
+}
+function clearReturnCookie(): string {
+  return `${RETURN_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`;
 }
 
 function sendHtml(
@@ -295,6 +312,14 @@ export async function handleOAuthCallback(
     redirect(res, `/join?token=${encodeURIComponent(pendingJoin)}`, setCookies);
     return;
   }
+  // A device-auth approval (or any pre-login link) stashes a local return path in
+  // `hub_return`; honor it (local paths only) instead of dropping the user on /app.
+  const pendingReturn = parseCookies(req.headers.cookie)[RETURN_COOKIE];
+  if (pendingReturn && pendingReturn.startsWith('/') && !pendingReturn.startsWith('//')) {
+    setCookies.push(clearReturnCookie());
+    redirect(res, pendingReturn, setCookies);
+    return;
+  }
   redirect(res, '/app', setCookies);
 }
 
@@ -346,6 +371,124 @@ export async function handleAccount(
     return;
   }
   redirect(res, '/app');
+}
+
+/* ------------------------------------------------------------------- device --- */
+
+const DEVICE_CSRF_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * GET /device — device-authorization approval page (docs/protocol/device-auth.md).
+ * Session-gated like /admin: no session -> account login, returning here (code
+ * preserved) via `hub_return`. A valid pending user_code shows an Approve form; NO
+ * key is minted here — that happens when the client polls after approval.
+ */
+export function handleDevicePage(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: GatewayContext,
+  url: URL,
+): void {
+  const { config, db } = ctx;
+  if (!sessionLoginEnabled(config)) {
+    sendHtml(res, 503, page('Device sign-in not configured', ''));
+    return;
+  }
+  const secret = config.sessionSecret!;
+  const rawCode = url.searchParams.get('code') ?? '';
+  const session = readAccount(req.headers.cookie, secret);
+  if (!session) {
+    const code = normalizeUserCode(rawCode);
+    const back = `/device${code ? `?code=${encodeURIComponent(code)}` : ''}`;
+    redirect(res, '/account/login', setReturnCookie(back));
+    return;
+  }
+  const code = normalizeUserCode(rawCode);
+  const pending = code ? findPendingByUserCode(db, code, Date.now()) : null;
+  if (!pending) {
+    sendHtml(res, code ? 404 : 200, deviceEntryPage(session, rawCode, Boolean(code)));
+    return;
+  }
+  const csrf = signValue({ c: pending.userCode, exp: Date.now() + DEVICE_CSRF_TTL_MS }, secret);
+  sendHtml(res, 200, deviceApprovePage(session, pending, csrf));
+}
+
+/** POST /device — approve the pending request for the signed-in account. */
+export async function handleDeviceApprove(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: GatewayContext,
+): Promise<void> {
+  const { config, db } = ctx;
+  if (!sessionLoginEnabled(config)) {
+    sendHtml(res, 503, page('Device sign-in not configured', ''));
+    return;
+  }
+  const secret = config.sessionSecret!;
+  const session = readAccount(req.headers.cookie, secret);
+  if (!session) return redirect(res, '/account/login');
+  let form: URLSearchParams;
+  try {
+    form = new URLSearchParams((await readBody(req, 4 * 1024)).toString('utf8'));
+  } catch {
+    return sendHtml(res, 400, page('Bad request', ''));
+  }
+  const userCode = normalizeUserCode(form.get('user_code') ?? '');
+  const csrf = verifyValue<{ c?: string }>(form.get('csrf') ?? '', secret);
+  if (!csrf || csrf.c !== userCode) {
+    sendHtml(
+      res,
+      403,
+      page('Approval failed', '<p class="prose-muted">Invalid or expired form. Reopen the link shown in your terminal.</p>'),
+    );
+    return;
+  }
+  const ok = approveDevice(db, userCode, session.accountId, Date.now());
+  sendHtml(res, ok ? 200 : 404, deviceResultPage(session, ok));
+}
+
+/** Code-entry / not-found page: a GET form to (re)enter a user code. */
+function deviceEntryPage(session: AccountSession, rawCode: string, notFound: boolean): string {
+  const msg = notFound
+    ? `<p class="mt-2 text-sm text-danger">That code was not found or has expired. Check your terminal and try again.</p>`
+    : `<p class="mt-2 text-sm prose-muted">Enter the code shown in your terminal to connect this device.</p>`;
+  const body = `<h1 class="text-2xl font-bold tracking-tight">Connect a device</h1>
+${msg}
+<form method="GET" action="/device" class="mt-5 flex items-center gap-2">
+ <input name="code" value="${htmlEscape(rawCode)}" placeholder="XXXX-XXXX" autofocus
+  class="rounded-md border border-default bg-canvas-inset px-3 py-2 font-mono uppercase tracking-widest">
+ <button type="submit" class="btn btn-primary">Continue</button>
+</form>`;
+  return layout({ title: 'Memorize Hub — connect a device', body, user: session });
+}
+
+/** Approval page: confirm identity + Approve for a valid pending user code. */
+function deviceApprovePage(session: AccountSession, pending: PendingDevice, csrf: string): string {
+  const body = `<h1 class="text-2xl font-bold tracking-tight">Connect a device</h1>
+<p class="mt-2 prose-muted">A device is asking to sign in as
+ <strong class="text-fg">${htmlEscape(session.email)}</strong>. Only approve this if you just started a
+ login from your own terminal.</p>
+<div class="card mt-4"><p class="text-xs uppercase tracking-wide text-fg-subtle">Code</p>
+ <p class="mt-1 font-mono text-2xl tracking-widest">${htmlEscape(pending.userCode)}</p></div>
+<form method="POST" action="/device" class="mt-5 flex items-center gap-3">
+ <input type="hidden" name="user_code" value="${htmlEscape(pending.userCode)}">
+ <input type="hidden" name="csrf" value="${htmlEscape(csrf)}">
+ <button type="submit" class="btn btn-primary">Approve</button>
+ <a href="/app" class="text-sm text-fg-muted hover:text-fg hover:no-underline">Cancel</a>
+</form>`;
+  return layout({ title: 'Memorize Hub — approve device', body, user: session });
+}
+
+/** Post-approval result page. */
+function deviceResultPage(session: AccountSession, ok: boolean): string {
+  const body = ok
+    ? `<h1 class="text-2xl font-bold tracking-tight">Device approved</h1>
+<p class="mt-2 prose-muted">Return to your terminal — it will finish signing in automatically. You can
+ close this tab.</p>`
+    : `<h1 class="text-2xl font-bold tracking-tight">Nothing to approve</h1>
+<p class="mt-2 prose-muted">That request was not found or has expired. Start the login again from your
+ terminal.</p>`;
+  return layout({ title: 'Memorize Hub — device', body, user: session });
 }
 
 /* -------------------------------------------------------------------- admin --- */

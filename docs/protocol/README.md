@@ -16,10 +16,11 @@ missing in the single-file draft).
 | [`store-resolution.md`](./store-resolution.md) | server-minted store ids, discovery overview | gateway (control) |
 | [`personal-store.md`](./personal-store.md) | `psm_` per-account personal memory | gateway (control) |
 | [`workspace.md`](./workspace.md) | `wsp_` create / invite / join / membership / roles | gateway (control) |
+| [`device-auth.md`](./device-auth.md) | `POST /v1/device/code` · `/device` · `POST /v1/device/token` (browser device login) | gateway (control) |
 
-`transport.md` is the only surface a **bare relay** (no gateway) serves. The other
-three are gateway control-plane; a relay knows nothing of accounts, stores, or
-prefixes (Hub SoT [[H010]]).
+`transport.md` is the only surface a **bare relay** (no gateway) serves. The rest
+are gateway control-plane; a relay knows nothing of accounts, stores, or prefixes
+(Hub SoT [[H010]]).
 
 ---
 
