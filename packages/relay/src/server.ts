@@ -3,10 +3,13 @@
  *
  *   POST /v1/projects/:id/events   SyncPushRequest  -> SyncPushResponse
  *   GET  /v1/projects/:id/events?since={id}         -> SyncPullResponse
+ *   GET  /v1/stats                                  -> RelayStats  (internal ops)
  *   GET  /healthz                                   -> { ok: true }
  *
  * Optional bearer token gates every route (healthz included, so a token
- * holder verifies reachability and credentials in one call).
+ * holder verifies reachability and credentials in one call). `/v1/stats` is an
+ * INTERNAL endpoint for the gateway's cost dashboard — sizes/counts only, never
+ * payloads (relay opacity, H010); it is not part of the client wire contract.
  */
 import { createServer, type Server } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
@@ -113,6 +116,11 @@ export function createRelayServer(options: RelayOptions): Server {
 
         if (req.method === 'GET' && url.pathname === '/healthz') {
           send(200, { ok: true });
+          return;
+        }
+
+        if (req.method === 'GET' && url.pathname === '/v1/stats') {
+          send(200, await store.stats());
           return;
         }
 
