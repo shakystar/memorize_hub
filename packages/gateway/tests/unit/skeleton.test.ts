@@ -54,7 +54,8 @@ describe('gateway skeleton', () => {
   });
 
   it('501s a wired-but-unported control-plane route', async () => {
-    const res = await fetch(`${base}/v1/workspaces`, { method: 'POST' });
+    // Invite/join + member lifecycle land in S4; still a skeleton placeholder.
+    const res = await fetch(`${base}/v1/workspaces/join`, { method: 'POST' });
     expect(res.status).toBe(501);
   });
 

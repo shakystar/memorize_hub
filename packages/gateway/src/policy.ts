@@ -1,8 +1,10 @@
 import type Database from 'better-sqlite3';
 
 import { isPersonalStoreId, isWorkspaceStoreId } from './ids.js';
+import { tokenCoversStore } from './keys.js';
 import { getPersonalStoreOwner } from './personal-store.js';
 import type { Principal } from './principal.js';
+import { memberRole } from './stores.js';
 
 /**
  * The single authorization gate (Hub SoT H030, docs/protocol/README.md §2-5).
@@ -67,15 +69,31 @@ export function authorize(
       return { ok: true, status: 200 };
     }
 
-    // Workspace data-plane ACL (membership ∩ key scope) lands with the stores DAL
-    // in a later slice (S3/S5). Until then no workspace store is reachable.
+    // Workspace store (data-plane): membership ∩ key scope (workspace.md §data-plane).
+    // A scoped key must additionally list this store; an unscoped key covers all
+    // the account's stores. write vs read_only is already handled above.
     if (isWorkspaceStoreId(storeId)) {
-      return { ok: false, status: 403, error: 'workspace access not yet available' };
+      const role = memberRole(db, storeId, principal.accountId);
+      if (!role) return { ok: false, status: 403, error: 'not a member of this store' };
+      if (principal.scoped && principal.tokenId && !tokenCoversStore(db, principal.tokenId, storeId)) {
+        return { ok: false, status: 403, error: 'this key is not scoped to this store' };
+      }
+      return { ok: true, status: 200 };
     }
 
     return { ok: false, status: 403, error: 'unknown store' };
   }
 
-  // Control-plane workspace resources are added with the workspace handlers (S3).
-  return { ok: false, status: 404, error: 'not found' };
+  // Control-plane workspace resource (membership / invite / lifecycle). Management
+  // requires an unscoped key (scoped keys are data-plane only, README §3). Members
+  // may read; only owners may `admin`. Existence-leak: non-member/unknown -> 404.
+  if (principal.scoped) {
+    return { ok: false, status: 403, error: 'management requires an unscoped key' };
+  }
+  const role = memberRole(db, resource.storeId, principal.accountId);
+  if (!role) return { ok: false, status: 404, error: 'not found' };
+  if (action === 'admin' && role !== 'owner') {
+    return { ok: false, status: 403, error: 'owner only' };
+  }
+  return { ok: true, status: 200 };
 }

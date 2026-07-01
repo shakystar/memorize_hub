@@ -12,6 +12,7 @@ import {
   type TokenSummary,
 } from './keys.js';
 import { getOrCreatePersonalStore } from './personal-store.js';
+import { createStore, listAccountStores, type AccountStore } from './stores.js';
 import {
   beginLogin,
   clearStateCookie,
@@ -239,13 +240,33 @@ export async function handleAccount(
     return;
   }
 
-  // Mint a new API key. In S2 keys are unscoped (they reach personal memory and,
-  // once granted, every workspace); a read-only checkbox is the only narrowing.
-  // Per-workspace scoping arrives with the workspace UI (S3).
+  // Create a workspace (owner, sole member, private until first invite).
+  if (req.method === 'POST' && path === '/account/workspaces') {
+    const form = await readForm(req).catch(() => null);
+    const nameRaw = (form?.get('name') ?? '').trim();
+    if (nameRaw.length > 200) {
+      const body = signedInView(ctx, session, origin, { notice: 'Name must be at most 200 characters.' });
+      sendHtml(res, 400, layout({ title: 'memorize Hub — account', body, user: session }));
+      return;
+    }
+    createStore(db, session.accountId, nameRaw.length > 0 ? nameRaw : undefined);
+    const body = signedInView(ctx, session, origin, {
+      notice: nameRaw ? `Workspace “${htmlEscape(nameRaw)}” created.` : 'Workspace created.',
+    });
+    sendHtml(res, 201, layout({ title: 'memorize Hub — account', body, user: session }));
+    return;
+  }
+
+  // Mint a new API key. No workspaces checked -> an unscoped key (personal memory +
+  // every workspace). Checking specific workspaces -> a data-plane-only scoped key.
+  // read_only is orthogonal.
   if (req.method === 'POST' && path === '/account/keys') {
     const form = await readForm(req).catch(() => null);
     const readOnly = form?.get('readonly') === '1';
-    const { plaintext } = issueApiKey(db, session.accountId, session.login, { readOnly });
+    const owned = new Set(listAccountStores(db, session.accountId).map((s) => s.storeId));
+    const storeIds = (form?.getAll('stores') ?? []).filter((s) => owned.has(s));
+    const opts = storeIds.length > 0 ? { readOnly, storeIds } : { readOnly };
+    const { plaintext } = issueApiKey(db, session.accountId, session.login, opts);
     const body = signedInView(ctx, session, origin, { issuedKey: plaintext });
     sendHtml(res, 201, layout({ title: 'memorize Hub — account', body, user: session }));
     return;
@@ -290,6 +311,7 @@ function signedInView(
 ): string {
   const personal = getOrCreatePersonalStore(ctx.db, session.accountId);
   const tokens = listAccountTokens(ctx.db, session.accountId);
+  const workspaces = listAccountStores(ctx.db, session.accountId);
   const notice = flash.notice
     ? `<p class="mt-4 rounded-md border border-default bg-canvas-subtle px-4 py-2 text-sm">${flash.notice}</p>`
     : '';
@@ -318,9 +340,13 @@ ${notice}${issued}
  <p class="mt-3 text-sm">Personal store id: <code class="font-mono">${htmlEscape(personal.storeId)}</code></p>
 </div>
 
+<h2 class="mt-8 text-lg font-semibold">Workspaces</h2>
+${workspacesView(workspaces)}
+${createWorkspaceForm()}
+
 <h2 class="mt-8 text-lg font-semibold">API keys</h2>
 ${keysView(tokens)}
-${generateKeyForm()}
+${generateKeyForm(workspaces)}
 
 <h2 class="mt-8 text-lg font-semibold">Connect a machine</h2>
 <p class="mt-1 text-sm prose-muted">Generate a key above, then log in once per host and
@@ -363,11 +389,68 @@ function keysView(tokens: TokenSummary[]): string {
  <tbody>${rows}</tbody></table></div>`;
 }
 
-/** The mint-a-key form. S2: unscoped only, with an optional read-only toggle. */
-function generateKeyForm(): string {
+/** The account's workspaces (private + shared) as a table. */
+function workspacesView(workspaces: AccountStore[]): string {
+  if (workspaces.length === 0) {
+    return '<p class="mt-2 text-sm prose-muted">No workspaces yet. Create one below — a workspace with one member is just a private project.</p>';
+  }
+  const rows = workspaces
+    .map((w) => {
+      const kind = w.inviteReachable
+        ? `<span class="text-fg-muted">shared</span>`
+        : `<span class="text-fg-muted">private</span>`;
+      const name = w.name ? htmlEscape(w.name) : '<span class="text-fg-muted">—</span>';
+      const role = w.role === 'owner' ? '<span class="text-fg">owner</span>' : 'member';
+      return `<tr class="border-t border-default">
+ <td class="py-2 pr-4">${name}</td>
+ <td class="py-2 pr-4"><code class="font-mono">${htmlEscape(w.storeId)}</code></td>
+ <td class="py-2 pr-4">${role}</td>
+ <td class="py-2 pr-4">${kind}</td>
+ <td class="py-2 pr-4 text-fg-muted">${w.memberCount}</td></tr>`;
+    })
+    .join('');
+  return `<div class="mt-2 overflow-x-auto"><table class="w-full text-sm">
+ <thead><tr class="text-left text-fg-muted">
+  <th class="pb-1 pr-4 font-medium">name</th><th class="pb-1 pr-4 font-medium">workspace id</th>
+  <th class="pb-1 pr-4 font-medium">role</th><th class="pb-1 pr-4 font-medium">kind</th>
+  <th class="pb-1 pr-4 font-medium">members</th></tr></thead>
+ <tbody>${rows}</tbody></table></div>`;
+}
+
+/** Create-a-workspace form (optional display name). */
+function createWorkspaceForm(): string {
+  return `<form method="POST" action="/account/workspaces" class="mt-4 flex flex-wrap items-end gap-3">
+ <div>
+  <label class="block text-sm prose-muted" for="ws-name">Name <span class="text-fg-subtle">(optional)</span></label>
+  <input id="ws-name" name="name" maxlength="200" placeholder="e.g. team-notes"
+   class="mt-1 rounded-md border border-default bg-canvas px-3 py-1.5 text-sm">
+ </div>
+ <button class="btn btn-primary" type="submit">Create workspace</button>
+</form>`;
+}
+
+/**
+ * The mint-a-key form. An unscoped key (no boxes checked) syncs personal memory +
+ * every workspace; checking specific workspaces mints a data-plane-only scoped key
+ * (no personal memory). A read-only toggle is orthogonal.
+ */
+function generateKeyForm(workspaces: AccountStore[]): string {
+  const boxes = workspaces
+    .map(
+      (w) => `<label class="flex items-center gap-2 text-sm">
+  <input type="checkbox" name="stores" value="${htmlEscape(w.storeId)}">
+  <code class="font-mono">${htmlEscape(w.storeId)}</code>${w.name ? ` <span class="text-fg-muted">(${htmlEscape(w.name)})</span>` : ''}</label>`,
+    )
+    .join('');
+  const scopeBlock = workspaces.length
+    ? `<div class="mt-3 space-y-1">
+  <p class="text-sm prose-muted">Scope to specific workspaces (leave all unchecked for an
+   unscoped key that also syncs personal memory). A scoped key never reaches personal memory.</p>
+  ${boxes}</div>`
+    : '';
   return `<form method="POST" action="/account/keys" class="mt-4">
- <p class="text-sm prose-muted">Mint a key for your machines. An unscoped key syncs your
-  personal memory and every workspace you belong to.</p>
+ <p class="text-sm prose-muted">Mint a key for your machines.</p>
+ ${scopeBlock}
  <label class="mt-3 flex items-center gap-2 text-sm">
   <input type="checkbox" name="readonly" value="1"> read-only key (pull only)</label>
  <button class="btn btn-primary mt-3" type="submit">Generate a new key</button>
