@@ -66,4 +66,38 @@ describe('operator dashboard gate (/admin)', () => {
       expect(html).toContain(section);
     }
   });
+
+  it('renders the Accounts list for an operator', async () => {
+    const res = await fetch(`${base}/admin/accounts`, {
+      headers: { cookie: cookieFor('operator@e.com') },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Accounts');
+    expect(html).toContain('operator@e.com'); // the seeded account is listed
+  });
+
+  it('renders the Billing seam for an operator', async () => {
+    const res = await fetch(`${base}/admin/billing`, {
+      headers: { cookie: cookieFor('operator@e.com') },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Billing');
+    expect(html).toContain('unlimited'); // no plan enforcement yet — the seam
+  });
+
+  it('404s the sub-sections for a non-operator (no existence leak)', async () => {
+    for (const path of ['/admin/accounts', '/admin/billing']) {
+      const res = await fetch(`${base}${path}`, { headers: { cookie: cookieFor('stranger@e.com') } });
+      expect(res.status).toBe(404);
+    }
+  });
+
+  it('404s an unknown operator sub-path', async () => {
+    const res = await fetch(`${base}/admin/nope`, {
+      headers: { cookie: cookieFor('operator@e.com') },
+    });
+    expect(res.status).toBe(404);
+  });
 });
