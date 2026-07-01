@@ -9,7 +9,7 @@ auto sync — a pnpm monorepo with two packages:
   projection, identity, or conflict resolution — that all lives in memorize
   clients.
 - **`packages/gateway`** — the **control-plane** that fronts the relay: public
-  edge, project-scoped API-key auth + ACL, GitHub-OAuth operator/account
+  edge, project-scoped API-key auth + ACL, Google-OAuth operator/account
   dashboards, a beta access-request page, and a reverse proxy that injects the
   relay's internal token.
 

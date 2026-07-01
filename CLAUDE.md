@@ -48,8 +48,10 @@ The sibling `memorize` repo holds the client.
   project-scoped API keys, ACL reverse proxy, beta access-request page,
   `hub-gateway-admin` CLI (manual approval), and a two-replica async-convergence
   e2e through the gateway (`pnpm --filter @shakystar/memorize-hub-gateway e2e`).
-  - **M4 done** - GitHub-OAuth operator dashboard (`/admin`) + participant
-    self-service (`/account`), per-key project scoping + read-only keys.
+  - **M4 done** - Google-OAuth (OIDC) operator dashboard (`/admin`) + participant
+    self-service (`/account`), per-key project scoping + read-only keys. (Auth
+    revised from GitHub OAuth so non-developers aren't gated on a GitHub account;
+    email is the identity anchor + admin allowlist key.)
   - **M5 done (infra)** - deployed live on Fly.io
     (`https://memorize-hub-shakystar.fly.dev`): gateway public + TLS, relay
     internal-only + token-gated, durable `/data` volume, CI continuous deploy +
@@ -81,7 +83,7 @@ the relay either.
 
 Memorize is the single source of truth for project state. Do not store
 project ids, task lists, decisions, handoffs, or summaries of them in
-your own memory system - they go stale silently. Query memorize at
+your own memory system — they go stale silently. Query memorize at
 session start instead (`memorize task resume`, `memorize project show`).
 Your own memory is for per-self content only: user preferences and your
 own working-style lessons. To absorb pre-existing notes into memorize,

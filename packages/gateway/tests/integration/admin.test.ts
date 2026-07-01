@@ -18,11 +18,11 @@ import { createStore } from '../../src/stores.js';
  */
 
 const config = loadGatewayConfig({
-  GITHUB_CLIENT_ID: 'cid',
-  GITHUB_CLIENT_SECRET: 'csec',
+  GOOGLE_CLIENT_ID: 'cid',
+  GOOGLE_CLIENT_SECRET: 'csec',
   GATEWAY_PUBLIC_URL: 'https://hub.example',
   GATEWAY_SESSION_SECRET: 'test-secret',
-  GATEWAY_ADMIN_LOGINS: 'operator',
+  GATEWAY_ADMIN_EMAILS: 'operator@e.com',
 });
 const db = openGatewayDb(':memory:');
 const server = createGatewayServer({ db, config });
@@ -33,8 +33,8 @@ const acc = upsertAccountByEmail(db, 'operator@e.com');
 createStore(db, acc, 'demo');
 
 const secret = config.sessionSecret!;
-const cookieFor = (login: string): string =>
-  accountCookie({ accountId: acc, login, email: `${login}@e.com` }, secret).split(';')[0]!;
+const cookieFor = (email: string): string =>
+  accountCookie({ accountId: acc, email }, secret).split(';')[0]!;
 
 beforeAll(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -54,12 +54,12 @@ describe('operator dashboard gate (/admin)', () => {
   });
 
   it('404s a signed-in non-operator (no existence leak)', async () => {
-    const res = await fetch(`${base}/admin`, { headers: { cookie: cookieFor('stranger') } });
+    const res = await fetch(`${base}/admin`, { headers: { cookie: cookieFor('stranger@e.com') } });
     expect(res.status).toBe(404);
   });
 
   it('renders the read-only Overview for an allowlisted operator', async () => {
-    const res = await fetch(`${base}/admin`, { headers: { cookie: cookieFor('operator') } });
+    const res = await fetch(`${base}/admin`, { headers: { cookie: cookieFor('operator@e.com') } });
     expect(res.status).toBe(200);
     const html = await res.text();
     for (const section of ['Operator', 'Control plane', 'Traffic', 'Storage at rest']) {

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { upsertAccountByGithub } from './accounts.js';
+import { upsertAccountByGoogle } from './accounts.js';
 import { adminEnabled, sessionLoginEnabled } from './config.js';
 import type { GatewayContext } from './context.js';
 import { sendError, sendJson } from './http.js';
@@ -29,6 +29,7 @@ import {
   docsSidebar,
   htmlEscape,
   layout,
+  operatorLayout,
   originFor,
 } from './views.js';
 
@@ -43,8 +44,8 @@ import {
  * and `/admin` (S5) land in later slices.
  */
 
-/** Account login asks for the email scope so we attach a verified email. */
-const ACCOUNT_SCOPE = 'read:user user:email';
+/** OIDC scopes for account login: verified email + stable sub, plus profile. */
+const ACCOUNT_SCOPE = 'openid email profile';
 
 /** Short-lived cookie carrying a pending /join invite token across OAuth login. */
 const JOIN_COOKIE = 'hub_join';
@@ -164,7 +165,7 @@ const DOC_PAGES: DocPage[] = [
 <h2 class="${H2}">1. Update memorize</h2>
 ${cmdBlock('memorize update')}
 <h2 class="${H2}">2. Get a key</h2>
-<p class="${P}">Open the <a href="/app" class="text-accent hover:underline">dashboard</a>, sign in with GitHub,
+<p class="${P}">Open the <a href="/app" class="text-accent hover:underline">dashboard</a>, sign in with Google,
  and generate an API key under your account.</p>
 <h2 class="${H2}">3. Log in once per machine</h2>
 <p class="${P}">Store the key host-wide so later commands carry no inline token.</p>
@@ -268,14 +269,14 @@ export async function handleOAuthCallback(
     sendHtml(res, 503, page('Accounts not configured', ''), { 'set-cookie': clearStateCookie });
     return;
   }
-  const resolved = await resolveLogin(config, code, { fetchEmail: true });
-  if (!resolved || !resolved.email) {
-    sendHtml(res, 403, page('Login failed', '<p class="prose-muted">Could not read a verified email from your GitHub account.</p>'), { 'set-cookie': clearStateCookie });
+  const resolved = await resolveLogin(config, code);
+  if (!resolved) {
+    sendHtml(res, 403, page('Login failed', '<p class="prose-muted">Could not read a verified email from your Google account.</p>'), { 'set-cookie': clearStateCookie });
     return;
   }
-  const accountId = upsertAccountByGithub(db, resolved.login, resolved.email);
+  const accountId = upsertAccountByGoogle(db, resolved.sub, resolved.email);
   const setCookies = [
-    accountCookie({ accountId, login: resolved.login, email: resolved.email }, secret),
+    accountCookie({ accountId, email: resolved.email }, secret),
     clearStateCookie,
   ];
   // A login started from a /join link stashes the invite token in `hub_join`; on
@@ -299,7 +300,6 @@ export function handleAccountMe(req: IncomingMessage, res: ServerResponse, ctx: 
   const personal = getOrCreatePersonalStore(ctx.db, session.accountId);
   sendJson(res, 200, {
     accountId: session.accountId,
-    login: session.login,
     email: session.email,
     personalStoreId: personal.storeId,
   });
@@ -322,7 +322,7 @@ export async function handleAccount(
       503,
       page(
         'Accounts not configured',
-        '<p class="prose-muted">Set GITHUB_CLIENT_ID/SECRET, GATEWAY_PUBLIC_URL, and GATEWAY_SESSION_SECRET.</p>',
+        '<p class="prose-muted">Set GOOGLE_CLIENT_ID/SECRET, GATEWAY_PUBLIC_URL, and GATEWAY_SESSION_SECRET.</p>',
       ),
     );
     return;
@@ -366,7 +366,7 @@ export async function handleAdmin(
     redirect(res, '/account/login');
     return;
   }
-  if (!config.adminLogins.includes(session.login)) {
+  if (!config.adminEmails.includes(session.email)) {
     // Existence-leak policy (policy.ts): a non-operator must not learn /admin exists.
     sendHtml(res, 404, page('Not found', '<p class="prose-muted">Not found.</p>'));
     return;
@@ -447,11 +447,11 @@ function renderOverview(session: AccountSession, o: Overview): string {
     : `<p class="text-sm text-fg-muted">Relay unreachable — no size snapshot.</p>`;
 
   const body = `
-<div class="flex items-center justify-between">
- <h1 class="text-2xl font-bold tracking-tight">Operator</h1>
- <span class="text-sm text-fg-muted">operator: @${htmlEscape(session.login)}</span>
+<div class="flex items-baseline justify-between">
+ <h1 class="text-2xl font-bold tracking-tight">Overview</h1>
+ <span class="text-xs text-fg-subtle">read-only · aggregate</span>
 </div>
-<p class="mt-2 text-sm prose-muted">Aggregate and read-only — sizes and counts only, never keys or memory contents.</p>
+<p class="mt-1 text-sm prose-muted">Sizes and counts only, never keys or memory contents.</p>
 
 <h2 class="mt-8 text-lg font-semibold">Control plane</h2>
 <div class="mt-3 grid gap-4 sm:grid-cols-3 lg:grid-cols-5">${controlPlane}</div>
@@ -462,7 +462,16 @@ function renderOverview(session: AccountSession, o: Overview): string {
 <h2 class="mt-8 text-lg font-semibold">Storage at rest</h2>
 <div class="mt-3">${storage}</div>`;
 
-  return layout({ title: 'memorize Hub — Operator', body, user: session, wide: true });
+  return operatorLayout({
+    title: 'memorize Hub — Operator',
+    email: session.email,
+    nav: [
+      { label: 'Overview', href: '/admin', active: true },
+      { label: 'Accounts', href: null },
+      { label: 'Billing', href: null },
+    ],
+    body,
+  });
 }
 
 /**

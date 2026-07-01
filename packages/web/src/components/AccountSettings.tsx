@@ -109,7 +109,7 @@ export function AccountSettings({
         <div className="border-b border-border px-6 py-4">
           <DialogTitle>Account</DialogTitle>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            @{me.login} · <span className="font-mono">{me.email}</span>
+            <span className="font-mono">{me.email}</span>
           </p>
         </div>
 

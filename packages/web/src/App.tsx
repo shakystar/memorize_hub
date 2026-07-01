@@ -102,18 +102,15 @@ function Sidebar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-secondary">
-              <img
-                src={`https://github.com/${encodeURIComponent(me.login)}.png?size=48`}
-                alt=""
-                className="h-7 w-7 rounded-full border border-border bg-secondary"
-              />
-              <span className="truncate">@{me.login}</span>
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-xs font-semibold">
+                {(me.email[0] ?? '?').toUpperCase()}
+              </span>
+              <span className="truncate">{me.email}</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-60">
             <DropdownMenuLabel>
-              <div className="text-sm font-medium">@{me.login}</div>
-              <div className="truncate text-xs text-muted-foreground">{me.email}</div>
+              <div className="truncate text-sm font-medium">{me.email}</div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onOpenAccount}>Account settings</DropdownMenuItem>

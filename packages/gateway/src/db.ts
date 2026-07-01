@@ -26,17 +26,18 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
   // personal stores. Server-minted ids throughout (H050).
   (db) => {
     db.exec(`
-      -- OAuth-rooted account. github_login is the stable handle; email is the
-      -- cross-channel anchor. A future 'plan' column (free/team/pro) is the
-      -- entitlements seam (H080) — NOT added now; plan is implicitly unlimited.
+      -- OAuth-rooted account. provider_sub is the stable Google OIDC sub; email
+      -- is the cross-channel anchor + display handle. A future 'plan' column
+      -- (free/team/pro) is the entitlements seam (H080) — NOT added now; plan is
+      -- implicitly unlimited.
       CREATE TABLE IF NOT EXISTS accounts (
         id           TEXT PRIMARY KEY,          -- acc_…
         email        TEXT NOT NULL UNIQUE,
-        github_login TEXT,
+        provider_sub TEXT,
         created_at   TEXT NOT NULL
       );
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_github
-        ON accounts(github_login) WHERE github_login IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_provider
+        ON accounts(provider_sub) WHERE provider_sub IS NOT NULL;
 
       -- Account API key. read_only is the read/write axis; token_scopes is the
       -- which-stores axis. Both only ever narrow access (docs/protocol README §3).

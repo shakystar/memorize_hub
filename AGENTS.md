@@ -129,8 +129,10 @@ fine.
   manual-approval CLI, and a two-replica async-convergence e2e through the gateway.
 - **M4 (done)** - operator **OAuth login + dashboard** (`/admin`) + participant
   self-service (`/account`), browser approval UI, per-key project scoping +
-  read-only keys. Decision resolved: **GitHub OAuth** (one app, one
-  `/oauth/callback`, backs both flows).
+  read-only keys. Decision resolved: **Google OAuth (OIDC)** (one client, one
+  `/oauth/callback`, backs both flows). Revised from GitHub OAuth so non-developer
+  participants are not gated on having a GitHub account; email is the identity
+  anchor + admin allowlist key, provider is generic (`provider_sub`).
 - **M5 (done, infra)** - **public deploy** on **Fly.io** (decision resolved):
   gateway (public, TLS-terminated) + relay (internal-only, token-gated) in one
   Docker image, durable `/data` volume, CI continuous deploy + live smoke test;
