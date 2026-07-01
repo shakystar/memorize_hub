@@ -17,11 +17,11 @@ import {
 import {
   accountCookie,
   clearAccountCookie,
-  operatorCookie,
   parseCookies,
   readAccount,
   type AccountSession,
 } from './session.js';
+import { gatherOverview, type Overview } from './overview.js';
 import {
   cmdBlock,
   copyScript,
@@ -262,21 +262,8 @@ export async function handleOAuthCallback(
     return;
   }
 
-  if (state.flow === 'admin') {
-    if (!adminEnabled(config)) {
-      sendHtml(res, 503, page('Operator dashboard not configured', ''), { 'set-cookie': clearStateCookie });
-      return;
-    }
-    const resolved = await resolveLogin(config, code);
-    if (!resolved || !config.adminLogins.includes(resolved.login)) {
-      sendHtml(res, 403, page('Not authorized', '<p class="prose-muted">This GitHub account is not an operator.</p>'), { 'set-cookie': clearStateCookie });
-      return;
-    }
-    redirect(res, '/admin', [operatorCookie(resolved.login, secret), clearStateCookie]);
-    return;
-  }
-
-  // account flow
+  // Single flow: account login. The operator dashboard reuses this session and
+  // gates on the admin allowlist at /admin — there is no separate operator login.
   if (!sessionLoginEnabled(config)) {
     sendHtml(res, 503, page('Accounts not configured', ''), { 'set-cookie': clearStateCookie });
     return;
@@ -355,18 +342,127 @@ export async function handleAccount(
 
 /* -------------------------------------------------------------------- admin --- */
 
-/** /admin[/...] — operator dashboard (session + allowlist). Built in S5. */
-export function handleAdmin(
-  _req: IncomingMessage,
+/**
+ * /admin — operator dashboard. Gated by the ACCOUNT session + the admin allowlist
+ * (no separate operator login): signed-out -> account login; signed-in but not an
+ * operator -> 404 (don't reveal the surface exists); operator -> read-only
+ * Overview. Read-only + aggregate only, so there is no mutation/CSRF surface.
+ */
+export async function handleAdmin(
+  req: IncomingMessage,
   res: ServerResponse,
   ctx: GatewayContext,
   _url: URL,
-): void {
-  if (!adminEnabled(ctx.config)) {
+): Promise<void> {
+  const { config, db } = ctx;
+  if (!adminEnabled(config)) {
     sendHtml(res, 503, page('Operator dashboard not configured', ''));
     return;
   }
-  sendHtml(res, 200, page('Operator dashboard', '<p class="prose-muted">Coming soon.</p>'));
+  const secret = config.sessionSecret!; // adminEnabled implies session config is set
+  const session = readAccount(req.headers.cookie, secret);
+  if (!session) {
+    // Signed-out — go through the normal account login, then revisit /admin.
+    redirect(res, '/account/login');
+    return;
+  }
+  if (!config.adminLogins.includes(session.login)) {
+    // Existence-leak policy (policy.ts): a non-operator must not learn /admin exists.
+    sendHtml(res, 404, page('Not found', '<p class="prose-muted">Not found.</p>'));
+    return;
+  }
+  const overview = await gatherOverview(db, config);
+  sendHtml(res, 200, renderOverview(session, overview));
+}
+
+/** Human-readable byte size (one decimal above KB). */
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = n / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(1)} ${units[unit]}`;
+}
+
+function statCard(label: string, value: string, sub?: string): string {
+  return `<div class="card">
+   <p class="text-xs font-medium uppercase tracking-wide text-fg-subtle">${htmlEscape(label)}</p>
+   <p class="mt-1 text-2xl font-semibold tabular-nums">${htmlEscape(value)}</p>
+   ${sub ? `<p class="mt-0.5 text-xs text-fg-muted">${htmlEscape(sub)}</p>` : ''}
+  </div>`;
+}
+
+/** Operator Overview — aggregate, read-only (no key values, no memory contents). */
+function renderOverview(session: AccountSession, o: Overview): string {
+  const { counts: c, storage: s, traffic: t } = o;
+  const num = (n: number): string => n.toLocaleString('en-US');
+
+  const controlPlane = [
+    statCard('Accounts', num(c.accounts)),
+    statCard(
+      'Workspaces',
+      num(c.workspacesPrivate + c.workspacesShared),
+      `${num(c.workspacesPrivate)} private · ${num(c.workspacesShared)} shared`,
+    ),
+    statCard('Members', num(c.members)),
+    statCard('API keys', num(c.keysActive), `${num(c.keysRevoked)} revoked`),
+    statCard('Personal stores', num(c.personalStores)),
+  ].join('');
+
+  const trafficCards = [
+    statCard('Requests', num(t.requests)),
+    statCard('Egress', formatBytes(t.bytesOut)),
+    statCard('Ingress', formatBytes(t.bytesIn)),
+  ].join('');
+
+  const storageTable =
+    s.top.length === 0
+      ? ''
+      : `<div class="card mt-4 overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="text-left text-fg-subtle">
+         <th class="pb-2 font-medium">Store</th>
+         <th class="pb-2 text-right font-medium">Events</th>
+         <th class="pb-2 text-right font-medium">Size</th>
+        </tr></thead>
+        <tbody>${s.top
+          .map(
+            (row) => `<tr class="border-t border-default">
+           <td class="py-1.5 font-mono text-xs">${htmlEscape(row.storeId)}</td>
+           <td class="py-1.5 text-right tabular-nums">${num(row.events)}</td>
+           <td class="py-1.5 text-right tabular-nums">${htmlEscape(formatBytes(row.bytes))}</td>
+          </tr>`,
+          )
+          .join('')}</tbody></table></div>`;
+
+  const storage = s.reachable
+    ? `<div class="grid gap-4 sm:grid-cols-3">
+        ${statCard('Total stored', formatBytes(s.totals.bytes))}
+        ${statCard('Events', num(s.totals.events))}
+        ${statCard('Stores', num(s.totals.stores))}
+       </div>${storageTable}`
+    : `<p class="text-sm text-fg-muted">Relay unreachable — no size snapshot.</p>`;
+
+  const body = `
+<div class="flex items-center justify-between">
+ <h1 class="text-2xl font-bold tracking-tight">Operator</h1>
+ <span class="text-sm text-fg-muted">operator: @${htmlEscape(session.login)}</span>
+</div>
+<p class="mt-2 text-sm prose-muted">Aggregate and read-only — sizes and counts only, never keys or memory contents.</p>
+
+<h2 class="mt-8 text-lg font-semibold">Control plane</h2>
+<div class="mt-3 grid gap-4 sm:grid-cols-3 lg:grid-cols-5">${controlPlane}</div>
+
+<h2 class="mt-8 text-lg font-semibold">Traffic <span class="text-sm font-normal text-fg-subtle">· last ${t.days} days</span></h2>
+<div class="mt-3 grid gap-4 sm:grid-cols-3">${trafficCards}</div>
+
+<h2 class="mt-8 text-lg font-semibold">Storage at rest</h2>
+<div class="mt-3">${storage}</div>`;
+
+  return layout({ title: 'memorize Hub — Operator', body, user: session, wide: true });
 }
 
 /**
