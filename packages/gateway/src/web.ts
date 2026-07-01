@@ -115,7 +115,7 @@ export function handleLanding(req: IncomingMessage, res: ServerResponse, ctx: Ga
  </div>
 </section>
 ${copyScript()}`;
-  sendHtml(res, 200, layout({ title: 'memorize Hub', body, user }));
+  sendHtml(res, 200, layout({ title: 'Memorize Hub', body, user }));
 }
 
 /* --------------------------------------------------------------------- docs --- */
@@ -136,7 +136,7 @@ const DOC_PAGES: DocPage[] = [
     slug: '',
     title: 'Overview',
     section: 'Getting started',
-    render: () => `<h1 class="${H1}">memorize Hub</h1>
+    render: () => `<h1 class="${H1}">Memorize Hub</h1>
 <p class="mt-3 text-base prose-muted max-w-2xl">The Hub is the optional relay + control-plane for
  <a href="https://github.com/shakystar/memorize" class="text-accent hover:underline">memorize</a>'s
  cross-machine sync. It holds opaque per-store event logs so your machines — and teammates — converge
@@ -229,11 +229,11 @@ export function handleDocs(
   const page = DOC_PAGES.find((p) => p.slug === slug);
   if (!page) {
     const content = `<h1 class="${H1}">Not found</h1><p class="${P}">No such docs page. <a href="/docs" class="text-accent hover:underline">Back to docs</a>.</p>`;
-    sendHtml(res, 404, docsLayout({ title: 'memorize Hub — docs', sidebar: docsSidebar(links, ''), content }));
+    sendHtml(res, 404, docsLayout({ title: 'Memorize Hub — docs', sidebar: docsSidebar(links, ''), content }));
     return;
   }
   const content = `${page.render(origin)}${copyScript()}`;
-  sendHtml(res, 200, docsLayout({ title: `memorize Hub — ${page.title}`, sidebar: docsSidebar(links, slug), content }));
+  sendHtml(res, 200, docsLayout({ title: `Memorize Hub — ${page.title}`, sidebar: docsSidebar(links, slug), content }));
 }
 
 /* ---------------------------------------------------------- oauth callback --- */
@@ -463,7 +463,7 @@ function renderOverview(session: AccountSession, o: Overview): string {
 <div class="mt-3">${storage}</div>`;
 
   return operatorLayout({
-    title: 'memorize Hub — Operator',
+    title: 'Memorize Hub — Operator',
     email: session.email,
     nav: [
       { label: 'Overview', href: '/admin', active: true },
@@ -524,7 +524,7 @@ export function handleJoinPage(
 ${cmdBlock(`memorize auth login --remote-url ${origin} --token YOUR_KEY`)}
 <p class="mt-4"><a href="/account" class="btn btn-primary">Go to your account</a></p>
 ${copyScript()}`;
-  sendHtml(res, 200, layout({ title: 'memorize Hub — joined', body, user: session }), {
+  sendHtml(res, 200, layout({ title: 'Memorize Hub — joined', body, user: session }), {
     'set-cookie': clearJoinCookie(),
   });
 }
@@ -533,7 +533,7 @@ ${copyScript()}`;
 
 /** A minimal standalone page (no signed-in nav state needed). */
 function page(title: string, bodyHtml: string): string {
-  return layout({ title: `memorize Hub — ${title}`, body: `<h1 class="text-2xl font-bold">${htmlEscape(title)}</h1>${bodyHtml}` });
+  return layout({ title: `Memorize Hub — ${title}`, body: `<h1 class="text-2xl font-bold">${htmlEscape(title)}</h1>${bodyHtml}` });
 }
 
 /** The signed-in account for header nav, if the session cookie is valid. */

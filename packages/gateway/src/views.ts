@@ -69,7 +69,7 @@ export function layout({ title, body, user, wide = false }: LayoutOptions): stri
   return `${pageHead(title)}<body class="min-h-screen bg-canvas text-fg antialiased">
 <header class="border-b border-default">
  <div class="${container} mx-auto flex items-center justify-between gap-4 px-5 py-3">
-  <a href="/" class="font-semibold text-fg hover:no-underline">memorize <span class="text-fg-muted">Hub</span></a>
+  <a href="/" class="font-semibold text-fg hover:no-underline">Memorize <span class="text-fg-muted">Hub</span></a>
   <nav class="flex items-center gap-5 text-sm">
    <a href="/docs" class="text-fg-muted hover:text-fg hover:no-underline">Docs</a>
    <a href="${GITHUB_URL}" class="text-fg-muted hover:text-fg hover:no-underline">GitHub</a>
@@ -80,7 +80,7 @@ export function layout({ title, body, user, wide = false }: LayoutOptions): stri
 <main class="${container} mx-auto px-5 py-10">${body}</main>
 <footer class="border-t border-default mt-16">
  <div class="${container} mx-auto px-5 py-8 text-sm text-fg-muted">
-  <p>memorize Hub — the optional relay + control-plane for
+  <p>Memorize Hub — the optional relay + control-plane for
    <a href="${GITHUB_URL}" class="text-accent hover:underline">memorize</a>'s cross-machine sync.
    AGPL-3.0.</p>
  </div>
@@ -185,7 +185,7 @@ export function docsLayout({
   return `${pageHead(title)}<body class="min-h-screen bg-canvas text-fg antialiased">
 <header class="sticky top-0 z-30 border-b border-default bg-canvas/90 backdrop-blur">
  <div class="max-w-6xl mx-auto flex items-center justify-between gap-4 px-5 py-3">
-  <a href="/" class="font-semibold text-fg hover:no-underline">memorize <span class="text-fg-muted">Hub</span>
+  <a href="/" class="font-semibold text-fg hover:no-underline">Memorize <span class="text-fg-muted">Hub</span>
    <span class="ml-1 text-fg-subtle">Docs</span></a>
   <nav class="flex items-center gap-4 text-sm">
    <a href="${GITHUB_URL}" class="text-fg-muted hover:text-fg hover:no-underline">GitHub</a>
@@ -243,7 +243,7 @@ export function operatorLayout({
  <div class="max-w-6xl mx-auto flex items-center justify-between gap-4 px-5 py-3">
   <span class="flex items-center gap-2 font-semibold text-fg">
    <span class="inline-block h-2 w-2 rounded-full bg-success" title="live"></span>
-   Operator <span class="ml-1 font-normal text-fg-subtle">memorize Hub</span>
+   Operator <span class="ml-1 font-normal text-fg-subtle">Memorize Hub</span>
   </span>
   <nav class="flex items-center gap-4 text-sm text-fg-muted">
    <span class="tabular-nums">${htmlEscape(email)}</span>
