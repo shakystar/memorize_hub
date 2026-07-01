@@ -1,6 +1,7 @@
 import { BookText, Github, Plus, Settings, Users } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
+import { AccountSettings } from '@/components/AccountSettings';
 import { NewWorkspaceDialog } from '@/components/NewWorkspaceDialog';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
 import { Button } from '@/components/ui/button';
@@ -13,12 +14,14 @@ function Sidebar({
   selectedId,
   onSelect,
   onCreate,
+  onOpenAccount,
 }: {
   me: Me;
   workspaces: Workspace[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  onOpenAccount: () => void;
 }) {
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-card">
@@ -68,9 +71,9 @@ function Sidebar({
       </nav>
 
       <div className="border-t border-border p-2">
-        <a
-          href="/account"
-          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-secondary hover:no-underline"
+        <button
+          onClick={onOpenAccount}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-secondary"
           title="Account settings"
         >
           <img
@@ -79,7 +82,7 @@ function Sidebar({
             className="h-7 w-7 rounded-full border border-border bg-secondary"
           />
           <span className="truncate">@{me.login}</span>
-        </a>
+        </button>
       </div>
     </aside>
   );
@@ -165,6 +168,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
 
   const refreshWorkspaces = useCallback(async () => {
     const ws = await listWorkspaces();
@@ -218,6 +222,7 @@ export default function App() {
         selectedId={selectedId}
         onSelect={setSelectedId}
         onCreate={() => setNewOpen(true)}
+        onOpenAccount={() => setAccountOpen(true)}
       />
       <main className="min-w-0 flex-1">
         {selected ? (
@@ -254,6 +259,7 @@ export default function App() {
           onChanged={onChanged}
         />
       )}
+      <AccountSettings me={me} workspaces={workspaces} open={accountOpen} onOpenChange={setAccountOpen} />
     </div>
   );
 }

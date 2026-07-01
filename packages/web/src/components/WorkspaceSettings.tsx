@@ -112,6 +112,12 @@ export function WorkspaceSettings({
           <div className="mt-2 divide-y divide-border">
             {detail?.members.map((m) => {
               const self = m.accountId === me.accountId;
+              const memberCount = detail.members.length;
+              // A solo member is always the owner; "Leave" would silently delete the
+              // workspace, so hide it (Delete in Settings covers that) and only show
+              // Leave when there is someone else to leave behind.
+              const showLeave = self && memberCount > 1;
+              const showRemove = !self && isOwner;
               return (
                 <div key={m.accountId} className="flex items-center justify-between py-2 text-sm">
                   <span>
@@ -134,7 +140,7 @@ export function WorkspaceSettings({
                         {m.role === 'owner' ? 'Make member' : 'Make owner'}
                       </Button>
                     )}
-                    {(isOwner || self) && (
+                    {(showLeave || showRemove) && (
                       <Button
                         variant="secondary"
                         size="sm"

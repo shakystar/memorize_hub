@@ -233,15 +233,17 @@ export async function handleOAuthCallback(
 
 /* ---------------------------------------------------------- account (JSON) --- */
 
-/** GET /account/me — the SPA's "who am I". Session cookie -> account JSON, else 401. */
+/** GET /account/me — the SPA's "who am I" + personal-store id. 401 if no session. */
 export function handleAccountMe(req: IncomingMessage, res: ServerResponse, ctx: GatewayContext): void {
   const secret = ctx.config.sessionSecret;
   const session = secret ? readAccount(req.headers.cookie, secret) : null;
   if (!session) return sendError(res, 401, 'not signed in');
+  const personal = getOrCreatePersonalStore(ctx.db, session.accountId);
   sendJson(res, 200, {
     accountId: session.accountId,
     login: session.login,
     email: session.email,
+    personalStoreId: personal.storeId,
   });
 }
 

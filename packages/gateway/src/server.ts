@@ -1,5 +1,10 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
+import {
+  handleAccountKeyIssue,
+  handleAccountKeyRevoke,
+  handleAccountKeysList,
+} from './account-api.js';
 import { handleAsset, isAssetPath } from './assets.js';
 import type { GatewayContext } from './context.js';
 import { sendError, sendJson } from './http.js';
@@ -87,6 +92,10 @@ async function route(
   // --- account discovery (API key) --------------------------------------
   if (method === 'GET' && p === '/v1/account/personal-store') return handlePersonalStore(req, res, ctx);
   if (method === 'GET' && p === '/v1/account/workspaces') return listWorkspaces(req, res, ctx);
+  if (method === 'GET' && p === '/v1/account/keys') return handleAccountKeysList(req, res, ctx);
+  if (method === 'POST' && p === '/v1/account/keys') return handleAccountKeyIssue(req, res, ctx);
+  const accountKey = /^\/v1\/account\/keys\/([^/]+)$/.exec(p);
+  if (accountKey && method === 'DELETE') return handleAccountKeyRevoke(req, res, ctx, decode(accountKey[1]));
 
   // --- workspace control-plane (API key / session) ----------------------
   // Order: fixed paths and longer patterns before the generic /:id.

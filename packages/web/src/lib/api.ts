@@ -8,6 +8,17 @@ export interface Me {
   accountId: string;
   login: string;
   email: string;
+  personalStoreId: string;
+}
+
+export interface TokenSummary {
+  id: string;
+  prefix: string;
+  label: string | null;
+  readOnly: boolean;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  scopes: string[];
 }
 
 export interface Workspace {
@@ -137,4 +148,33 @@ export async function removeMember(id: string, accountId: string): Promise<void>
 export async function deleteWorkspace(id: string): Promise<void> {
   const res = await fetch(`/v1/workspaces/${q(id)}`, { method: 'DELETE', credentials: 'same-origin' });
   await ok(res, `DELETE workspace`);
+}
+
+/* --- account (personal settings) -------------------------------------------- */
+
+export async function listKeys(): Promise<TokenSummary[]> {
+  const res = await fetch('/v1/account/keys', { credentials: 'same-origin' });
+  await ok(res, 'GET /v1/account/keys');
+  return ((await res.json()) as { keys: TokenSummary[] }).keys;
+}
+
+/** Mint a key; returns the plaintext (shown once). */
+export async function issueKey(opts: {
+  label?: string;
+  readOnly?: boolean;
+  storeIds?: string[];
+}): Promise<string> {
+  const res = await fetch('/v1/account/keys', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  await ok(res, 'POST /v1/account/keys');
+  return ((await res.json()) as { key: string }).key;
+}
+
+export async function revokeKey(id: string): Promise<void> {
+  const res = await fetch(`/v1/account/keys/${q(id)}`, { method: 'DELETE', credentials: 'same-origin' });
+  await ok(res, 'DELETE /v1/account/keys');
 }
