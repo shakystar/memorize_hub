@@ -29,6 +29,7 @@ import {
   docsSidebar,
   htmlEscape,
   layout,
+  operatorLayout,
   originFor,
 } from './views.js';
 
@@ -447,11 +448,11 @@ function renderOverview(session: AccountSession, o: Overview): string {
     : `<p class="text-sm text-fg-muted">Relay unreachable — no size snapshot.</p>`;
 
   const body = `
-<div class="flex items-center justify-between">
- <h1 class="text-2xl font-bold tracking-tight">Operator</h1>
- <span class="text-sm text-fg-muted">operator: @${htmlEscape(session.login)}</span>
+<div class="flex items-baseline justify-between">
+ <h1 class="text-2xl font-bold tracking-tight">Overview</h1>
+ <span class="text-xs text-fg-subtle">read-only · aggregate</span>
 </div>
-<p class="mt-2 text-sm prose-muted">Aggregate and read-only — sizes and counts only, never keys or memory contents.</p>
+<p class="mt-1 text-sm prose-muted">Sizes and counts only, never keys or memory contents.</p>
 
 <h2 class="mt-8 text-lg font-semibold">Control plane</h2>
 <div class="mt-3 grid gap-4 sm:grid-cols-3 lg:grid-cols-5">${controlPlane}</div>
@@ -462,7 +463,16 @@ function renderOverview(session: AccountSession, o: Overview): string {
 <h2 class="mt-8 text-lg font-semibold">Storage at rest</h2>
 <div class="mt-3">${storage}</div>`;
 
-  return layout({ title: 'memorize Hub — Operator', body, user: session, wide: true });
+  return operatorLayout({
+    title: 'memorize Hub — Operator',
+    login: session.login,
+    nav: [
+      { label: 'Overview', href: '/admin', active: true },
+      { label: 'Accounts', href: null },
+      { label: 'Billing', href: null },
+    ],
+    body,
+  });
 }
 
 /**
