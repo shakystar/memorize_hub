@@ -110,6 +110,23 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       CREATE INDEX IF NOT EXISTS idx_personal_store_id ON personal_stores(store_id);
     `);
   },
+  // v2 — usage metering for cost visibility (Fly storage + egress). The data-plane
+  // proxy accumulates one row per store per UTC day: request count + bytes in/out.
+  // Aggregate SIZES ONLY — never event content — so relay opacity (H010) holds.
+  // This is metering, not access control; it gates nothing.
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS usage_daily (
+        day        TEXT NOT NULL,             -- UTC 'YYYY-MM-DD'
+        store_id   TEXT NOT NULL,
+        requests   INTEGER NOT NULL DEFAULT 0,
+        bytes_in   INTEGER NOT NULL DEFAULT 0, -- request bodies (pushes)
+        bytes_out  INTEGER NOT NULL DEFAULT 0, -- response bodies (egress)
+        PRIMARY KEY (day, store_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_usage_day ON usage_daily(day);
+    `);
+  },
 ];
 
 function runMigrations(db: Database.Database): void {

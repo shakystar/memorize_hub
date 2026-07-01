@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createRelayServer, type RelayOptions } from '../../src/server.js';
-import { EventStore } from '../../src/store.js';
+import { EventStore, type RelayStats } from '../../src/store.js';
 import type { OpaqueEvent, SyncPullResponse, SyncPushResponse } from '../../src/protocol.js';
 
 interface Relay {
@@ -102,6 +102,37 @@ describe('relay HTTP contract', () => {
 
     const empty = await pull(baseUrl, 'proj_a', 'evt_2');
     expect(empty).toEqual({ events: [] }); // no lastRemoteEventId when empty
+  });
+
+  it('reports per-store sizes on GET /v1/stats (internal, opaque)', async () => {
+    const { baseUrl } = await startRelay();
+    await push(baseUrl, 'proj_a', [evt('evt_1'), evt('evt_2')]);
+    await push(baseUrl, 'proj_b', [evt('evt_3')]);
+
+    const res = await fetch(`${baseUrl}/v1/stats`);
+    expect(res.status).toBe(200);
+    const stats = (await res.json()) as RelayStats;
+
+    expect(stats.totals).toEqual({
+      stores: 2,
+      events: 3,
+      bytes: stats.stores.reduce((sum, s) => sum + s.bytes, 0),
+    });
+    expect(stats.totals.bytes).toBeGreaterThan(0);
+
+    const byId = Object.fromEntries(stats.stores.map((s) => [s.storeId, s]));
+    expect(byId['proj_a']!.events).toBe(2);
+    expect(byId['proj_b']!.events).toBe(1);
+    // Larger store sorts first and has more bytes on disk.
+    expect(byId['proj_a']!.bytes).toBeGreaterThan(byId['proj_b']!.bytes);
+    expect(stats.stores[0]!.storeId).toBe('proj_a');
+  });
+
+  it('gates GET /v1/stats behind the bearer token', async () => {
+    const { baseUrl } = await startRelay({ token: 'secret' });
+    expect((await fetch(`${baseUrl}/v1/stats`)).status).toBe(401);
+    const ok = await fetch(`${baseUrl}/v1/stats`, { headers: { authorization: 'Bearer secret' } });
+    expect(ok.status).toBe(200);
   });
 
   it('treats an E2E ciphertext payload as fully opaque (byte-faithful round-trip)', async () => {

@@ -7,6 +7,7 @@ import { touchToken } from './keys.js';
 import { getOrCreatePersonalStore } from './personal-store.js';
 import { authorize } from './policy.js';
 import { resolveKeyPrincipal } from './principal.js';
+import { recordUsage } from './usage.js';
 
 /**
  * Data-plane reverse proxy to the dumb relay (docs/protocol/transport.md +
@@ -74,6 +75,13 @@ export async function handleEventsProxy(
 
   if (principal.tokenId) touchToken(ctx.db, principal.tokenId);
   const text = await relayRes.text();
+  // Meter bytes for cost visibility (usage.ts). Best-effort — a metering failure
+  // must never break the proxied response, so it's isolated from the reply.
+  try {
+    recordUsage(ctx.db, storeId, body?.length ?? 0, Buffer.byteLength(text));
+  } catch (error) {
+    console.error('[gateway] usage metering failed:', error);
+  }
   res.writeHead(relayRes.status, {
     'content-type': relayRes.headers.get('content-type') ?? 'application/json',
   });

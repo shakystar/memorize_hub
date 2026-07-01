@@ -7,10 +7,23 @@
  * Invariants (PROTOCOL.md): append-only, order-preserving, idempotent
  * dedup-by-id, opaque payloads.
  */
-import { appendFile, mkdir, readdir, readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { OpaqueEvent } from './protocol.js';
+
+/** Per-store size counters — opaque (no payload inspection): count + on-disk bytes. */
+export interface StoreStat {
+  storeId: string;
+  events: number;
+  bytes: number;
+}
+
+/** Relay-wide usage snapshot for the gateway's cost dashboard (sizes only). */
+export interface RelayStats {
+  stores: StoreStat[];
+  totals: { stores: number; events: number; bytes: number };
+}
 
 interface ProjectLog {
   events: OpaqueEvent[];
@@ -117,6 +130,33 @@ export class EventStore {
     // Keep the chain alive even if this append rejects.
     log.tail = run.catch(() => undefined);
     return run;
+  }
+
+  /**
+   * Per-store sizes for the gateway's cost dashboard: in-memory event count plus
+   * the events.ndjson on-disk byte size. Opaque — reads file metadata and the
+   * hydrated count only, never a payload — so relay opacity (H010) holds. Sorted
+   * largest-first; a store whose file isn't written yet reports 0 bytes.
+   */
+  async stats(): Promise<RelayStats> {
+    const stores: StoreStat[] = [];
+    let totalEvents = 0;
+    let totalBytes = 0;
+    for (const [projectId, log] of this.projects) {
+      await log.ready;
+      let bytes = 0;
+      try {
+        bytes = (await stat(this.eventsFile(projectId))).size;
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      const events = log.events.length;
+      stores.push({ storeId: projectId, events, bytes });
+      totalEvents += events;
+      totalBytes += bytes;
+    }
+    stores.sort((a, b) => b.bytes - a.bytes);
+    return { stores, totals: { stores: stores.length, events: totalEvents, bytes: totalBytes } };
   }
 
   /**
