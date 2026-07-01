@@ -107,8 +107,10 @@ export function SharePopover({
         className="w-96 p-0"
         onInteractOutside={(e) => {
           // A nested menu (role dropdown) portals outside this popover; interacting
-          // with it must not dismiss the popover. Only real outside clicks close it.
-          if ((e.target as Element | null)?.closest('[data-radix-popper-content-wrapper]')) {
+          // with it must not dismiss the popover. The real clicked node is on
+          // e.detail.originalEvent.target (e.target is the layer node), so check that.
+          const target = e.detail.originalEvent.target as Element | null;
+          if (target?.closest('[data-radix-popper-content-wrapper],[role="menu"]')) {
             e.preventDefault();
           }
         }}
