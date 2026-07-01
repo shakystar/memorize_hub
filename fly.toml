@@ -12,7 +12,10 @@ primary_region = "nrt"        # Tokyo; pick the region nearest your machines
   MEMORIZE_RELAY_PORT = "8787"
   RELAY_URL = "http://127.0.0.1:8787"
   MEMORIZE_RELAY_STORE = "/data/relay"
-  GATEWAY_DB = "/data/gateway.db"
+  # Clean-rebuild control-plane DB (new workspace-centric schema, H040). A fresh
+  # filename so it never collides with the retired legacy schema's user_version on
+  # the same volume; the old /data/gateway.db is left orphaned (reclaim manually).
+  GATEWAY_DB = "/data/gateway-v2.db"
   # Non-secret operator config (secrets go via `fly secrets set` — see DEPLOY.md):
   #   GATEWAY_PUBLIC_URL   = "https://<app>.fly.dev"
   #   GATEWAY_ADMIN_LOGINS = "your-github-login"

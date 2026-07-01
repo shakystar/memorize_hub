@@ -4,11 +4,11 @@ import type { GatewayConfig } from './config.js';
 import { signValue, verifyValue } from './session.js';
 
 /**
- * Minimal GitHub OAuth (authorization code), shared by two flows: the operator
- * dashboard and participant self-service. Both use ONE callback path,
- * `/oauth/callback`, so a single GitHub OAuth App registers exactly that URL —
- * no reliance on GitHub's sub-directory redirect_uri matching. The flow is
- * carried in the signed `state` and dispatched at the shared callback.
+ * Minimal GitHub OAuth (authorization code), shared by two flows: account
+ * self-service login and the operator dashboard. Both use ONE callback path,
+ * `/oauth/callback`, so a single GitHub OAuth App registers exactly that URL — no
+ * reliance on GitHub's sub-directory redirect_uri matching. The flow is carried
+ * in the signed `state` and dispatched at the shared callback (see web.ts).
  */
 
 const AUTHORIZE = 'https://github.com/login/oauth/authorize';
@@ -23,7 +23,7 @@ export const CALLBACK_PATH = '/oauth/callback';
 const COOKIE_PATH = '/oauth';
 const DEFAULT_SCOPE = 'read:user';
 
-export type OAuthFlow = 'admin' | 'participant';
+export type OAuthFlow = 'admin' | 'account';
 
 export function callbackUrl(config: GatewayConfig): string {
   return `${config.publicUrl}${CALLBACK_PATH}`;
@@ -32,7 +32,7 @@ export function callbackUrl(config: GatewayConfig): string {
 export interface LoginOptions {
   /** Which surface initiated login; dispatched at the shared callback. */
   flow: OAuthFlow;
-  /** OAuth scope; the participant flow adds `user:email` to read a verified email. */
+  /** OAuth scope; the account flow adds `user:email` to read a verified email. */
   scope?: string;
 }
 
@@ -63,8 +63,8 @@ export interface CallbackState {
 }
 
 /**
- * Verify the returned state against the signed cookie (CSRF guard) and recover
- * the flow. Returns null on any mismatch, bad signature, expiry, or unknown flow.
+ * Verify the returned state against the signed cookie (CSRF guard) and recover the
+ * flow. Returns null on any mismatch, bad signature, expiry, or unknown flow.
  */
 export function verifyCallback(
   returnedState: string | undefined,
@@ -73,7 +73,7 @@ export function verifyCallback(
 ): CallbackState | null {
   if (!returnedState || !cookieState || returnedState !== cookieState) return null;
   const payload = verifyValue<{ flow?: OAuthFlow }>(returnedState, secret);
-  if (!payload || (payload.flow !== 'admin' && payload.flow !== 'participant')) return null;
+  if (!payload || (payload.flow !== 'admin' && payload.flow !== 'account')) return null;
   return { flow: payload.flow };
 }
 
@@ -93,8 +93,8 @@ interface ResolveOptions {
 }
 
 /**
- * Exchange an authorization code for the authenticated GitHub login (and, for
- * the participant flow, a verified email). Returns null on any failure.
+ * Exchange an authorization code for the authenticated GitHub login (and, for the
+ * account flow, a verified email). Returns null on any failure.
  */
 export async function resolveLogin(
   config: GatewayConfig,

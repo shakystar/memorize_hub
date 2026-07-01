@@ -2,7 +2,7 @@
   "name": "@shakystar/memorize-hub",
   "version": "0.1.0",
   "private": true,
-  "license": "AGPL-3.0-or-later",
+  "license": "SEE LICENSE IN LICENSE.md",
   "author": "shakystar",
   "description": "memorize Hub — relay (transport) + gateway (control-plane) for memorize's cross-machine auto sync.",
   "type": "module",

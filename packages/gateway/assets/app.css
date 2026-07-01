@@ -1,0 +1,131 @@
+@import 'tailwindcss';
+
+/*
+ * Tailwind scans the server-rendered HTML strings (template literals in the TS
+ * handlers) for class names. Point it at the source tree explicitly so the CLI
+ * finds classes inside .ts files, not just .html.
+ */
+@source '../src/**/*.ts';
+
+/*
+ * GitHub Primer design tokens, reproduced as CSS variables (NOT the @primer/css
+ * framework — see the web-UI decision). Semantic names (canvas / fg / border /
+ * accent) switch on prefers-color-scheme; the @theme block maps them to Tailwind
+ * color utilities so `bg-canvas`, `text-fg`, `border-default`, `text-accent`,
+ * etc. all resolve the live variable and flip with the OS theme.
+ *
+ * Values are Primer's published light/dark primitives. Primer + Octicons are MIT.
+ */
+@theme {
+  --color-canvas: var(--canvas);
+  --color-canvas-subtle: var(--canvas-subtle);
+  --color-canvas-inset: var(--canvas-inset);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-default: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-attention-subtle: var(--attention-subtle);
+  --color-attention-border: var(--attention-border);
+  --color-btn-primary: var(--btn-primary);
+  --color-btn-primary-hover: var(--btn-primary-hover);
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/*
+ * Palette shared with the /app SPA: the ../memorize_studio tokens (calm dark,
+ * single blue accent). Dark by default, light under prefers-color-scheme, so the
+ * public server pages match the dashboard.
+ */
+:root {
+  --canvas: #0d0e11;
+  --canvas-subtle: #15171c;
+  --canvas-inset: #15171c;
+  --fg: #e6e8ec;
+  --fg-muted: #9aa1ad;
+  --fg-subtle: #5d6470;
+  --border: #23262e;
+  --accent: #6e9bff;
+  --accent-subtle: #6e9bff1f;
+  --success: #4fb477;
+  --danger: #d96a6a;
+  --attention-subtle: #1e1a10;
+  --attention-border: #d9a14a;
+  --btn-primary: #4d7fe6;
+  --btn-primary-hover: #5f8ef0;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --canvas: #f7f8fa;
+    --canvas-subtle: #ffffff;
+    --canvas-inset: #f0f1f4;
+    --fg: #1a1d23;
+    --fg-muted: #525a66;
+    --fg-subtle: #8a909c;
+    --border: #e3e6ea;
+    --accent: #3b6fe0;
+    --accent-subtle: #3b6fe01a;
+    --success: #2f9d63;
+    --danger: #c4504f;
+    --attention-subtle: #fff8e6;
+    --attention-border: #b9802e;
+    --btn-primary: #3b6fe0;
+    --btn-primary-hover: #345fc7;
+  }
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+/* Native <details> dropdown menu: hide the disclosure triangle so the summary can
+ * be a clean avatar/button trigger (the header account menu). */
+summary {
+  list-style: none;
+  cursor: pointer;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A soft elevation for popovers/menus that reads on both light and dark canvas. */
+.shadow-menu {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+/*
+ * A few Primer-flavored component classes for the recurring buttons/cards, so the
+ * HTML strings stay readable instead of repeating long utility runs.
+ */
+@layer components {
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-md border border-default bg-canvas-subtle px-4 py-1.5 text-sm font-medium text-fg transition-colors;
+  }
+  .btn:hover {
+    @apply border-fg-subtle no-underline;
+  }
+  .btn-primary {
+    @apply border-transparent bg-btn-primary text-white;
+  }
+  .btn-primary:hover {
+    @apply bg-btn-primary-hover border-transparent;
+  }
+  .card {
+    @apply rounded-lg border border-default bg-canvas p-6;
+  }
+  .prose-muted {
+    @apply text-fg-muted leading-relaxed;
+  }
+}

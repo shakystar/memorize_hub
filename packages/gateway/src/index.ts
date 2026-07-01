@@ -9,7 +9,7 @@ const server = createGatewayServer({ db, config });
 server.listen(config.port, () => {
   const auth = config.relayToken ? 'with relay token' : 'NO relay token (dev/open relay)';
   console.log(
-    `memorize Hub gateway listening on :${config.port} → relay ${config.relayUrl} (${auth}); db ${config.dbFile}`,
+    `memorize Hub gateway listening on :${config.port} -> relay ${config.relayUrl} (${auth}); db ${config.dbFile}`,
   );
   if (!config.relayToken) {
     console.warn(

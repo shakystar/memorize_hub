@@ -2,88 +2,94 @@ import type { IncomingMessage } from 'node:http';
 
 import type { GatewayConfig } from './config.js';
 
-/** Shared HTML shell + helpers for the Hub's public pages (landing, beta, docs).
- * Zero-dependency, hand-written HTML - matches the gateway's std-lib style. */
-
-const STYLE = `
-:root{color-scheme:light dark}
-*{box-sizing:border-box}
-body{font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0;color:#1a1a1a;background:#fff}
-@media(prefers-color-scheme:dark){body{color:#e8e8e8;background:#161616}}
-a{color:#2563eb;text-decoration:none}
-@media(prefers-color-scheme:dark){a{color:#6ea8fe}}
-a:hover{text-decoration:underline}
-header.site,main,footer.site{max-width:48rem;margin:0 auto;padding-left:1.25rem;padding-right:1.25rem}
-body.wide header.site,body.wide main,body.wide footer.site{max-width:60rem}
-header.site{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding-top:1.1rem;padding-bottom:1.1rem;border-bottom:1px solid #e5e5e5}
-@media(prefers-color-scheme:dark){header.site{border-color:#2a2a2a}}
-header.site .brand{font-weight:700;color:inherit;font-size:1.05rem}
-header.site nav a{margin-left:1rem;font-size:.92rem}
-main{padding-top:2rem;padding-bottom:3rem}
-h1{font-size:1.7rem;line-height:1.2;margin:.2rem 0 .6rem}
-h2{font-size:1.15rem;margin:2rem 0 .5rem}
-p.lead{font-size:1.1rem;color:#444}
-@media(prefers-color-scheme:dark){p.lead{color:#bbb}}
-.muted{color:#666;font-size:.9rem}
-@media(prefers-color-scheme:dark){.muted{color:#999}}
-.btn{display:inline-block;margin:1.1rem 0;padding:.65rem 1.3rem;border-radius:8px;background:#1a1a1a;color:#fff;font-weight:600}
-@media(prefers-color-scheme:dark){.btn{background:#e8e8e8;color:#161616}}
-.btn:hover{text-decoration:none;opacity:.9}
-code{background:#f3f3f3;padding:.12rem .35rem;border-radius:4px;font-size:.9em}
-@media(prefers-color-scheme:dark){code{background:#262626}}
-pre{background:#f6f6f6;padding:.9rem 1rem;border-radius:8px;overflow-x:auto;font-size:.86rem;line-height:1.5}
-@media(prefers-color-scheme:dark){pre{background:#1e1e1e}}
-pre code{background:none;padding:0}
-ol.steps{padding-left:1.2rem}ol.steps li{margin:.4rem 0}
-.docs-wrap{display:grid;grid-template-columns:13rem 1fr;gap:2.5rem;align-items:start}
-.docs-side{position:sticky;top:1.5rem}
-.docs-side .label{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:#888;margin:1.1rem 0 .4rem .5rem}
-.docs-side .label:first-child{margin-top:0}
-.docs-side ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.1rem}
-.docs-side a{display:block;padding:.3rem .55rem;border-radius:6px;font-size:.95rem;color:inherit}
-.docs-side a:hover{background:rgba(127,127,127,.12);text-decoration:none}
-.docs-side a[aria-current="page"]{font-weight:700;background:rgba(127,127,127,.16)}
-.docs-main{min-width:0}
-.docs-main h1:first-child{margin-top:0}
-@media(max-width:640px){
- .docs-wrap{grid-template-columns:1fr;gap:1rem}
- .docs-side{position:static;border-bottom:1px solid #e5e5e5;padding-bottom:.7rem}
- .docs-side ul{flex-direction:row;flex-wrap:wrap;gap:.2rem .6rem}
-}
-@media(prefers-color-scheme:dark){.docs-side{border-color:#2a2a2a}}
-footer.site{padding-top:1.5rem;padding-bottom:2rem;margin-top:2rem;border-top:1px solid #e5e5e5;font-size:.85rem;color:#666}
-@media(prefers-color-scheme:dark){footer.site{border-color:#2a2a2a;color:#999}}
-label{display:block;margin:1rem 0 .25rem;font-weight:600}
-input,textarea{width:100%;padding:.5rem;border:1px solid #bbb;border-radius:6px;font:inherit;background:inherit;color:inherit}
-@media(prefers-color-scheme:dark){input,textarea{border-color:#3a3a3a}}
-button.submit{margin-top:1.25rem;padding:.6rem 1.2rem;border:0;border-radius:6px;background:#1a1a1a;color:#fff;font:inherit;cursor:pointer}
-@media(prefers-color-scheme:dark){button.submit{background:#e8e8e8;color:#161616}}
-`.trim();
+/**
+ * Shared HTML shell for the Hub's server-rendered pages (landing, docs, account).
+ * Styling is Tailwind v4 built to a static /assets/app.css, themed with GitHub
+ * Primer design tokens (see the web-UI decision). Pages pass a pre-rendered,
+ * trusted HTML body; this wraps it in the header/nav + footer chrome.
+ */
 
 const GITHUB_URL = 'https://github.com/shakystar/memorize';
+
+/** Shared <head>: charset/viewport, fonts (Inter + JetBrains Mono), the built CSS. */
+function pageHead(title: string): string {
+  return `<!doctype html><html lang="en" class="bg-canvas text-fg"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${htmlEscape(title)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+</head>`;
+}
+
+export interface NavUser {
+  /** GitHub login of the signed-in account, shown in the header. */
+  login: string;
+  /** Verified email, shown in the account dropdown (optional). */
+  email?: string;
+}
 
 export interface LayoutOptions {
   title: string;
   /** Pre-rendered, trusted HTML for the page body. */
   body: string;
-  /** Widen the shell - used by the docs sidebar layout. */
+  /** The signed-in account, if any — swaps the header's Account link for a menu. */
+  user?: NavUser | null;
+  /** Widen the shell — used by the docs + settings layouts. */
   wide?: boolean;
 }
 
-/** Wrap a page body in the shared shell: header nav + main + footer. */
-export function layout({ title, body, wide = false }: LayoutOptions): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${htmlEscape(title)}</title>
-<style>${STYLE}</style></head><body${wide ? ' class="wide"' : ''}>
-<header class="site">
- <a class="brand" href="/">memorize Hub</a>
- <nav><a href="/docs">Docs</a><a href="/account">Account</a><a href="/beta">Beta</a><a href="${GITHUB_URL}">GitHub</a></nav>
+/** The header account control: an avatar that opens a native <details> dropdown. */
+function accountMenu(user: NavUser | null | undefined): string {
+  if (!user) {
+    return `<a href="/app" class="text-fg-muted hover:text-fg hover:no-underline">Open app</a>`;
+  }
+  const avatar = `https://github.com/${encodeURIComponent(user.login)}.png?size=48`;
+  const email = user.email
+    ? `<div class="truncate text-xs text-fg-muted">${htmlEscape(user.email)}</div>`
+    : '';
+  return `<details class="relative">
+ <summary class="flex items-center gap-2">
+  <img src="${avatar}" alt="@${htmlEscape(user.login)}" width="28" height="28"
+   class="h-7 w-7 rounded-full border border-default bg-canvas-subtle">
+ </summary>
+ <div class="shadow-menu absolute right-0 z-20 mt-2 w-60 rounded-lg border border-default bg-canvas p-1">
+  <div class="px-3 py-2">
+   <div class="text-sm font-semibold">@${htmlEscape(user.login)}</div>${email}
+  </div>
+  <div class="my-1 border-t border-default"></div>
+  <a href="/account" class="block rounded-md px-3 py-1.5 text-sm hover:bg-canvas-subtle hover:no-underline">Overview</a>
+  <a href="/account/workspaces" class="block rounded-md px-3 py-1.5 text-sm hover:bg-canvas-subtle hover:no-underline">Workspaces</a>
+  <a href="/account/keys" class="block rounded-md px-3 py-1.5 text-sm hover:bg-canvas-subtle hover:no-underline">API keys</a>
+  <div class="my-1 border-t border-default"></div>
+  <a href="/account/logout" class="block rounded-md px-3 py-1.5 text-sm text-danger hover:bg-canvas-subtle hover:no-underline">Sign out</a>
+ </div>
+</details>`;
+}
+
+/** Wrap a page body in the shared shell: sticky header nav + main + footer. */
+export function layout({ title, body, user, wide = false }: LayoutOptions): string {
+  const container = wide ? 'max-w-5xl' : 'max-w-3xl';
+  return `${pageHead(title)}<body class="min-h-screen bg-canvas text-fg antialiased">
+<header class="border-b border-default">
+ <div class="${container} mx-auto flex items-center justify-between gap-4 px-5 py-3">
+  <a href="/" class="font-semibold text-fg hover:no-underline">memorize <span class="text-fg-muted">Hub</span></a>
+  <nav class="flex items-center gap-5 text-sm">
+   <a href="/docs" class="text-fg-muted hover:text-fg hover:no-underline">Docs</a>
+   <a href="${GITHUB_URL}" class="text-fg-muted hover:text-fg hover:no-underline">GitHub</a>
+   ${accountMenu(user)}
+  </nav>
+ </div>
 </header>
-<main>${body}</main>
-<footer class="site">
- <p>memorize Hub - the optional relay for <a href="${GITHUB_URL}">memorize</a>'s cross-machine sync.
- AGPL-3.0. Events are stored as plaintext on the operator's machine (operator-trusted; not end-to-end encrypted).</p>
+<main class="${container} mx-auto px-5 py-10">${body}</main>
+<footer class="border-t border-default mt-16">
+ <div class="${container} mx-auto px-5 py-8 text-sm text-fg-muted">
+  <p>memorize Hub — the optional relay + control-plane for
+   <a href="${GITHUB_URL}" class="text-accent hover:underline">memorize</a>'s cross-machine sync.
+   AGPL-3.0. Shared-workspace memory is stored as plaintext on the operator's
+   machine (operator-trusted; not end-to-end encrypted).</p>
+ </div>
 </footer>
 </body></html>`;
 }
@@ -96,13 +102,108 @@ export function htmlEscape(value: string): string {
   );
 }
 
-/** The Hub's public origin for example commands: prefer the configured public
- * URL, else derive from the request Host (http for localhost, https otherwise). */
+/**
+ * The Hub's public origin for example commands: prefer the configured public URL,
+ * else derive from the request Host (http for localhost, https otherwise).
+ */
 export function originFor(req: IncomingMessage, config: GatewayConfig): string {
   if (config.publicUrl) return config.publicUrl;
   const host = req.headers.host ?? 'localhost:8080';
   const scheme = /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host) ? 'http' : 'https';
   return `${scheme}://${host}`;
+}
+
+/**
+ * A copy-to-clipboard command row: a monospace box + a copy button that reads the
+ * sibling code's text. The one small script is emitted once via `copyScript()`.
+ */
+export function cmdBlock(cmd: string): string {
+  return `<div class="flex items-center gap-2 my-2">
+ <code class="flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-default bg-canvas-inset px-3 py-2 text-sm font-mono">${htmlEscape(cmd)}</code>
+ <button type="button" class="copy btn shrink-0">copy</button></div>`;
+}
+
+/** The single clipboard handler shared by every `cmdBlock` on a page. */
+export function copyScript(): string {
+  return `<script>
+document.addEventListener('click',function(e){
+ var b=e.target;
+ if(b&&b.classList&&b.classList.contains('copy')){
+  var c=b.previousElementSibling;
+  if(c&&navigator.clipboard){navigator.clipboard.writeText(c.textContent).then(function(){
+   var t=b.textContent;b.textContent='copied';setTimeout(function(){b.textContent=t},1200);});}
+ }
+});
+</script>`;
+}
+
+/* --------------------------------------------------------------------- docs --- */
+
+export interface DocsPageLink {
+  slug: string;
+  title: string;
+  section: string;
+}
+
+/** The docs page tree grouped by section, for the docs sidebar. */
+export function docsSidebar(pages: DocsPageLink[], activeSlug: string): string {
+  const order: string[] = [];
+  const bySection = new Map<string, DocsPageLink[]>();
+  for (const p of pages) {
+    if (!bySection.has(p.section)) {
+      bySection.set(p.section, []);
+      order.push(p.section);
+    }
+    bySection.get(p.section)!.push(p);
+  }
+  return order
+    .map((section) => {
+      const links = bySection
+        .get(section)!
+        .map((p) => {
+          const href = p.slug === '' ? '/docs' : `/docs/${p.slug}`;
+          const cls =
+            p.slug === activeSlug
+              ? 'bg-canvas-subtle font-semibold text-fg'
+              : 'text-fg-muted hover:bg-canvas-subtle hover:text-fg hover:no-underline';
+          return `<a href="${href}" class="block rounded-md px-3 py-1.5 text-sm ${cls}">${htmlEscape(p.title)}</a>`;
+        })
+        .join('');
+      return `<div class="mb-4"><p class="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-fg-subtle">${htmlEscape(section)}</p>${links}</div>`;
+    })
+    .join('');
+}
+
+/**
+ * The docs shell — a dedicated documentation layout, deliberately WITHOUT the
+ * account avatar/menu chrome. Header carries the section brand + an "Open
+ * dashboard" button; a left page-tree sidebar sits beside the content.
+ */
+export function docsLayout({
+  title,
+  sidebar,
+  content,
+}: {
+  title: string;
+  sidebar: string;
+  content: string;
+}): string {
+  return `${pageHead(title)}<body class="min-h-screen bg-canvas text-fg antialiased">
+<header class="sticky top-0 z-30 border-b border-default bg-canvas/90 backdrop-blur">
+ <div class="max-w-6xl mx-auto flex items-center justify-between gap-4 px-5 py-3">
+  <a href="/" class="font-semibold text-fg hover:no-underline">memorize <span class="text-fg-muted">Hub</span>
+   <span class="ml-1 text-fg-subtle">Docs</span></a>
+  <nav class="flex items-center gap-4 text-sm">
+   <a href="${GITHUB_URL}" class="text-fg-muted hover:text-fg hover:no-underline">GitHub</a>
+   <a href="/app" class="btn btn-primary">Open dashboard -&gt;</a>
+  </nav>
+ </div>
+</header>
+<div class="max-w-6xl mx-auto grid gap-10 px-5 py-8 md:grid-cols-[15rem_minmax(0,1fr)]">
+ <aside class="md:sticky md:top-20 md:self-start">${sidebar}</aside>
+ <main class="min-w-0 pb-16">${content}</main>
+</div>
+</body></html>`;
 }
 
 export { GITHUB_URL };

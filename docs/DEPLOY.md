@@ -16,22 +16,27 @@ container; the gateway is the only public surface.
 
 ## Privacy / threat model (read this before onboarding others)
 
-Events are stored **as plaintext JSON** on the relay. "Opaque" in the design
-means the relay does not *interpret* payloads - **not** that they are encrypted.
+The relay stores events as JSON the running server can read: **"opaque" means the
+relay does not *interpret* payloads - not that they are end-to-end encrypted.**
 
 - **In transit:** encrypted (HTTPS/TLS terminated at the gateway edge).
-- **Access control:** a participant's API key is scoped to specific projects;
-  others cannot pull your project through the gateway.
-- **At rest / from the operator:** **plaintext.** Whoever runs the Hub can read
-  every participant's memory content on disk.
+- **At rest:** the `/data` volume is **disk/volume-encrypted** (host / Fly volume
+  encryption) - the v1 at-rest baseline (Hub SoT H070, memorize SoT-070). The
+  GitHub model: encrypted on disk, readable by the running server.
+- **Access control:** a participant's API key is scoped; others cannot pull your
+  project or workspace through the gateway.
+- **From the operator:** **still readable.** Disk encryption stops disk theft, not
+  the operator - whoever runs the Hub can read memory content via the running
+  server. This is by design: the server is the trust boundary and reads shared
+  data to consolidate it once for everyone (SoT-070).
 
 So this is an **operator-trusted** model - fine when the operator is you and the
-machines are yours. End-to-end encryption (encrypt payloads client-side, keep
-`event.id` plaintext) is a **future memorize-client feature** and needs **no Hub
-change** because the relay is already payload-opaque - tracked at
-[memorize#182](https://github.com/shakystar/memorize/issues/182). Until then,
-only onboard participants who are willing to have the operator able to read
-their content.
+machines are yours. End-to-end encryption (per-store data keys wrapped per device)
+is **deferred and demand-gated**: it is blocked on a recovery-policy decision
+(single-device loss = permanent loss) and would forgo server-side workspace
+consolidation (Hub SoT H070/H900, memorize SoT-070/900,
+[memorize#182](https://github.com/shakystar/memorize/issues/182)). Until then,
+only onboard participants willing to have the operator able to read their content.
 
 ---
 

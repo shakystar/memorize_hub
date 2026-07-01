@@ -84,10 +84,13 @@ everywhere"). Binding on future work here:
   locks and index growth for zero benefit - memorize has no cross-project
   queries by design. If the read surface ever needs a shared DB, it holds
   only users/tokens/ACL, never event data.
-- **Project/event id alignment across machines is already solved client-side**
-  (true-replica, memorize#30): replicas adopt the origin's projectId via
-  `project clone`, event ids are minted once globally-unique. The relay keys
-  by path id and needs no mapping layer.
+- **Project/event id alignment across machines** (true-replica, memorize#30):
+  replicas adopt the origin's `proj_` id via `project clone`; event ids are minted
+  once globally-unique. **Update (2026-07-01, SoT):** the *remote store* id is now
+  **server-minted** by the gateway (`wsp_…`/`psm_…`), and `proj_` is demoted to a
+  provenance label inside events (memorize SoT-020, Hub SoT H050). The **relay**
+  still keys by whatever path id it is handed and needs no mapping layer; the
+  **gateway** holds the account↔store mapping. See `docs/SoT/`.
 - **Scale path for the store, when needed (not before):** lazy per-project
   hydration instead of boot scan -> seen-id Set + file-offset index with
   streamed pulls -> retention/compaction (roadmap). Never a DB migration.
@@ -138,6 +141,13 @@ fine.
   `psm_` store + `GET /v1/account/personal-store` discovery; the gateway-side
   enforcement of the personal-vs-project isolation (memorize#181). Client side
   tracked in memorize#213.
+- **Shared workspace (designed 2026-07-01, rebuild pending)** - cross-account
+  union sync: server-minted `wsp_…` stores, membership/roles/invites in the
+  gateway (`POST /v1/workspaces` + invite/join + `GET /v1/account/workspaces`),
+  data over the opaque events route (relay unchanged). Architecture in
+  `docs/SoT/` (H020/H040/H050/H060/H080); wire in `docs/protocol/workspace.md`
+  (full endpoint set: create/invite/join/roster/role-change/leave/delete). The
+  gateway is being rebuilt clean (new package + ported core); relay untouched.
 - **Later** - retention/compaction policy, and a **realtime push channel**
   (SSE/websocket) for memorize P3-c (cross-machine live watermark deltas, not
   just poll-on-boundary).
