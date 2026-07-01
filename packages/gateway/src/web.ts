@@ -332,14 +332,17 @@ ${cmdBlock(`memorize project clone PROJECT_ID --remote-url ${origin}`)}
 ${copyScript()}`;
 }
 
-/** The account's keys as a table, each with a revoke action. */
+/**
+ * The account's ACTIVE keys as a table, each with a revoke action. Revoked keys
+ * are hidden from the list (their row is kept in the DB for security/audit, and
+ * the server rejects them at auth) — revoke is a soft-delete, not a row deletion.
+ */
 function keysView(tokens: TokenSummary[]): string {
-  if (tokens.length === 0) return '<p class="mt-2 text-sm prose-muted">No keys yet.</p>';
-  const rows = tokens
+  const active = tokens.filter((t) => !t.revokedAt);
+  if (active.length === 0) return '<p class="mt-2 text-sm prose-muted">No active keys yet.</p>';
+  const rows = active
     .map((t) => {
-      const status = t.revokedAt
-        ? '<span class="text-fg-muted">revoked</span>'
-        : `<form method="POST" action="/account/keys/${htmlEscape(t.id)}/revoke" class="m-0">
+      const revoke = `<form method="POST" action="/account/keys/${htmlEscape(t.id)}/revoke" class="m-0">
  <button class="btn text-sm">Revoke</button></form>`;
       const used = t.lastUsedAt ? htmlEscape(t.lastUsedAt) : 'never';
       const ro = t.readOnly ? ' <span class="text-fg-muted">(read-only)</span>' : '';
@@ -349,7 +352,7 @@ function keysView(tokens: TokenSummary[]): string {
  <td class="py-2 pr-4 text-fg-muted">${htmlEscape(t.label ?? '')}</td>
  <td class="py-2 pr-4 text-fg-muted">${scope}</td>
  <td class="py-2 pr-4 text-fg-muted">${used}</td>
- <td class="py-2">${status}</td></tr>`;
+ <td class="py-2">${revoke}</td></tr>`;
     })
     .join('');
   return `<div class="mt-2 overflow-x-auto"><table class="w-full text-sm">
