@@ -1,8 +1,9 @@
-import { BookText, BrainCircuit, Github, Plus, Settings, Users } from 'lucide-react';
+import { BookText, BrainCircuit, Github, Plus, Settings } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
 import { AccountSettings } from '@/components/AccountSettings';
 import { NewWorkspaceDialog } from '@/components/NewWorkspaceDialog';
+import { SharePopover } from '@/components/SharePopover';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
 import { Button } from '@/components/ui/button';
 import {
@@ -147,11 +148,15 @@ function SidebarLink({ icon, label, href }: { icon: ReactNode; label: string; hr
 }
 
 function WorkspaceView({
+  me,
   workspace,
   onOpenSettings,
+  onChanged,
 }: {
+  me: Me;
   workspace: Workspace;
   onOpenSettings: () => void;
+  onChanged: (opts?: { removed?: boolean }) => void;
 }) {
   const origin = window.location.origin;
   return (
@@ -164,12 +169,12 @@ function WorkspaceView({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={onOpenSettings}>
-            <Users /> {workspace.memberCount}
-          </Button>
-          <Button variant="secondary" size="sm" onClick={onOpenSettings}>
-            <Settings /> Settings
-          </Button>
+          <SharePopover me={me} workspaceId={workspace.workspaceId} onChanged={onChanged} />
+          {workspace.role === 'owner' && (
+            <Button variant="ghost" size="icon" onClick={onOpenSettings} title="Workspace settings">
+              <Settings />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -307,7 +312,12 @@ export default function App() {
         {view === 'personal' ? (
           <PersonalMemoryView me={me} />
         ) : selected ? (
-          <WorkspaceView workspace={selected} onOpenSettings={() => setSettingsOpen(true)} />
+          <WorkspaceView
+            me={me}
+            workspace={selected}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onChanged={onChanged}
+          />
         ) : (
           <div className="flex h-full items-center justify-center p-6">
             <div className="max-w-md rounded-lg border border-dashed border-border p-8 text-center">

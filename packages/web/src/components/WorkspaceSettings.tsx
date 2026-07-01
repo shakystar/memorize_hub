@@ -1,37 +1,19 @@
-import { Check, ChevronDown, Copy, Lock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
-import {
-  deleteWorkspace,
-  getWorkspace,
-  listInvites,
-  mintInvite,
-  removeMember,
-  renameWorkspace,
-  revokeInvite,
-  setMemberRole,
-  type InviteRow,
-  type Me,
-  type WorkspaceDetail,
-} from '@/lib/api';
-
-type Tab = 'members' | 'invites' | 'general';
+import { deleteWorkspace, getWorkspace, renameWorkspace, type Me, type WorkspaceDetail } from '@/lib/api';
 
 /**
- * Workspace settings — a categorized dialog (left tab nav + right pane) instead of
- * one long stacked scroll. Members (all), Invites (owner), General (owner: rename /
- * delete). Not-yet features (icon/color, publish policy) are labeled, not crammed.
+ * Workspace settings — a small centered dialog for owner-only General settings
+ * (rename, delete). Sharing (members/invites) lives in the Share popover, not here.
  */
 export function WorkspaceSettings({
   me,
@@ -47,28 +29,18 @@ export function WorkspaceSettings({
   onChanged: (opts?: { removed?: boolean }) => void;
 }) {
   const [detail, setDetail] = useState<WorkspaceDetail | null>(null);
-  const [invites, setInvites] = useState<InviteRow[]>([]);
-  const [mintedUrl, setMintedUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<Tab>('members');
-  const [maxUses, setMaxUses] = useState('');
-  const [expiresAt, setExpiresAt] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const isOwner = detail?.members.find((m) => m.accountId === me.accountId)?.role === 'owner';
 
   const load = useCallback(async () => {
-    setError(null);
-    const d = await getWorkspace(workspaceId);
-    setDetail(d);
-    const owner = d.members.find((m) => m.accountId === me.accountId)?.role === 'owner';
-    setInvites(owner ? await listInvites(workspaceId) : []);
-  }, [workspaceId, me.accountId]);
+    setDetail(await getWorkspace(workspaceId));
+  }, [workspaceId]);
 
   useEffect(() => {
     if (open) {
-      setMintedUrl(null);
-      setTab('members');
+      setError(null);
       void load().catch((e: unknown) => setError(String(e)));
     }
   }, [open, load]);
@@ -92,269 +64,60 @@ export function WorkspaceSettings({
     }
   };
 
-  const name = detail?.name ?? 'untitled';
-  const activeInvites = invites.filter(
-    (i) =>
-      !i.revokedAt &&
-      (!i.expiresAt || Date.parse(i.expiresAt) > Date.now()) &&
-      (i.maxUses === null || i.usedCount < i.maxUses),
-  );
-
-  const tabBtn = (id: Tab, label: string) => (
-    <button
-      onClick={() => setTab(id)}
-      className={cn(
-        'block w-full rounded-md px-3 py-1.5 text-left text-sm',
-        tab === id
-          ? 'bg-secondary font-medium text-foreground'
-          : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-      )}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 p-0 sm:max-w-5xl">
-        <div className="border-b border-border px-6 py-4">
-          <DialogTitle>{name}</DialogTitle>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Workspace settings</DialogTitle>
+          <DialogDescription>
             <code className="font-mono">{workspaceId}</code> ·{' '}
             {detail?.inviteReachable ? 'shared' : 'private'}
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="grid h-[34rem] max-h-[80vh] grid-cols-[12rem_1fr]">
-          <nav className="space-y-1 border-r border-border p-3">
-            {tabBtn('members', 'Members')}
-            {isOwner && tabBtn('invites', 'Invites')}
-            {isOwner && tabBtn('general', 'General')}
-          </nav>
+        {error && (
+          <p className="rounded-md border border-destructive px-3 py-2 text-sm text-destructive">{error}</p>
+        )}
 
-          <div className="min-h-0 overflow-y-auto p-6">
-            {error && (
-              <p className="mb-4 rounded-md border border-destructive px-3 py-2 text-sm text-destructive">
-                {error}
+        {isOwner && detail ? (
+          <div className="space-y-6">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const value = String(new FormData(e.currentTarget).get('name') ?? '');
+                void run(() => renameWorkspace(workspaceId, value));
+              }}
+            >
+              <label className="block text-xs text-muted-foreground">Name</label>
+              <div className="mt-1 flex gap-2">
+                <Input name="name" defaultValue={detail.name ?? ''} maxLength={200} />
+                <Button type="submit" variant="secondary" disabled={busy}>
+                  Save
+                </Button>
+              </div>
+            </form>
+
+            <div>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  if (!window.confirm('Delete this workspace? Members lose access. This cannot be undone.')) return;
+                  void run(() => deleteWorkspace(workspaceId), { removed: true });
+                }}
+              >
+                Delete workspace
+              </Button>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Icon/color and publish policy —{' '}
+                <span className="rounded-full border border-border px-2 py-0.5">개발 예정</span>
               </p>
-            )}
-
-            {tab === 'members' && (
-              <div>
-                <div className="divide-y divide-border">
-                  {detail?.members.map((m) => {
-                    const self = m.accountId === me.accountId;
-                    const showSelfLeave = self && detail.members.length > 1;
-                    return (
-                      <div key={m.accountId} className="flex items-center justify-between py-2.5 text-sm">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="flex size-7 items-center justify-center rounded-full border border-border bg-secondary text-xs">
-                            {(m.githubLogin ?? '?').slice(0, 1).toUpperCase()}
-                          </span>
-                          <span className="truncate">
-                            {m.githubLogin ? `@${m.githubLogin}` : m.accountId}
-                            {self && <span className="text-muted-foreground"> (you)</span>}
-                          </span>
-                        </div>
-                        {isOwner ? (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="gap-1 font-normal text-muted-foreground">
-                                {m.role} <ChevronDown className="size-3.5 opacity-60" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
-                              <DropdownMenuItem
-                                onSelect={() => {
-                                  if (m.role !== 'owner') void run(() => setMemberRole(workspaceId, m.accountId, 'owner'));
-                                }}
-                              >
-                                <Check className={cn('size-4', m.role === 'owner' ? 'opacity-100' : 'opacity-0')} /> Owner
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onSelect={() => {
-                                  if (m.role !== 'member') void run(() => setMemberRole(workspaceId, m.accountId, 'member'));
-                                }}
-                              >
-                                <Check className={cn('size-4', m.role === 'member' ? 'opacity-100' : 'opacity-0')} /> Member
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onSelect={() => {
-                                  if (!window.confirm(self ? 'Leave this workspace?' : 'Remove this member?')) return;
-                                  void run(() => removeMember(workspaceId, m.accountId), self ? { removed: true } : undefined);
-                                }}
-                              >
-                                {self ? 'Leave workspace' : 'Remove from workspace'}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        ) : showSelfLeave ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive"
-                            disabled={busy}
-                            onClick={() => {
-                              if (!window.confirm('Leave this workspace?')) return;
-                              void run(() => removeMember(workspaceId, m.accountId), { removed: true });
-                            }}
-                          >
-                            Leave
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">{m.role}</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-5 flex items-start gap-3 rounded-md border border-border p-3">
-                  <Lock className="mt-0.5 size-4 text-muted-foreground" />
-                  <div className="text-sm">
-                    <p className="font-medium">
-                      {detail?.inviteReachable ? 'Anyone with an invite link' : 'Only people invited'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {detail?.inviteReachable
-                        ? 'Shared — an active invite link lets new people join as members.'
-                        : 'Private — create an invite link (Invites tab) to let others join.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {tab === 'invites' && isOwner && (
-              <div>
-                {mintedUrl && (
-                  <div className="mb-4 rounded-md border border-border bg-secondary p-3">
-                    <p className="text-xs font-medium">Invite link (share it; shown once):</p>
-                    <div className="mt-1 flex items-center gap-2">
-                      <code className="flex-1 overflow-x-auto whitespace-nowrap text-xs font-mono">{mintedUrl}</code>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => void navigator.clipboard.writeText(mintedUrl)}
-                      >
-                        <Copy className="size-3.5" /> Copy link
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                <div className="divide-y divide-border">
-                  {activeInvites.length === 0 ? (
-                    <p className="py-2 text-sm text-muted-foreground">No active invites.</p>
-                  ) : (
-                    activeInvites.map((i) => (
-                      <div key={i.inviteId} className="flex items-center justify-between py-2 text-sm">
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {i.inviteId} · {i.maxUses === null ? `${i.usedCount}/∞` : `${i.usedCount}/${i.maxUses}`}
-                          {i.expiresAt ? ` · expires ${new Date(i.expiresAt).toLocaleDateString()}` : ''}
-                        </span>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => void run(() => revokeInvite(workspaceId, i.inviteId))}
-                        >
-                          Revoke
-                        </Button>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="mt-4 space-y-3 rounded-md border border-border p-3">
-                  <p className="text-xs text-muted-foreground">
-                    Create an invite link. Leave the limits blank for an unlimited, never-expiring link.
-                  </p>
-                  <div className="flex flex-wrap gap-3">
-                    <label className="text-sm">
-                      <span className="block text-xs text-muted-foreground">Max uses</span>
-                      <Input
-                        type="number"
-                        min={1}
-                        placeholder="∞"
-                        className="mt-1 w-28"
-                        value={maxUses}
-                        onChange={(e) => setMaxUses(e.target.value)}
-                      />
-                    </label>
-                    <label className="text-sm">
-                      <span className="block text-xs text-muted-foreground">Expires</span>
-                      <Input
-                        type="datetime-local"
-                        className="mt-1 w-56"
-                        value={expiresAt}
-                        onChange={(e) => setExpiresAt(e.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <Button
-                    size="sm"
-                    disabled={busy}
-                    onClick={() =>
-                      void run(async () => {
-                        const opts: { maxUses?: number; expiresAt?: string } = {};
-                        const mu = parseInt(maxUses, 10);
-                        if (maxUses.trim() && Number.isInteger(mu) && mu > 0) opts.maxUses = mu;
-                        if (expiresAt.trim()) opts.expiresAt = new Date(expiresAt).toISOString();
-                        const { joinUrl } = await mintInvite(workspaceId, opts);
-                        setMintedUrl(joinUrl);
-                        setMaxUses('');
-                        setExpiresAt('');
-                      })
-                    }
-                  >
-                    Create invite link
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {tab === 'general' && isOwner && detail && (
-              <div className="space-y-6">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const value = String(new FormData(e.currentTarget).get('name') ?? '');
-                    void run(() => renameWorkspace(workspaceId, value));
-                  }}
-                  className="flex items-end gap-2"
-                >
-                  <div>
-                    <label className="block text-xs text-muted-foreground">Name</label>
-                    <Input name="name" defaultValue={detail.name ?? ''} maxLength={200} className="mt-1 w-64" />
-                  </div>
-                  <Button type="submit" variant="secondary" size="sm" disabled={busy}>
-                    Save
-                  </Button>
-                </form>
-
-                <div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => {
-                      if (!window.confirm('Delete this workspace? Members lose access. This cannot be undone.')) return;
-                      void run(() => deleteWorkspace(workspaceId), { removed: true });
-                    }}
-                  >
-                    Delete workspace
-                  </Button>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Icon/color and publish policy —{' '}
-                    <span className="rounded-full border border-border px-2 py-0.5">개발 예정</span>
-                  </p>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Only an owner can change these settings.</p>
+        )}
       </DialogContent>
     </Dialog>
   );
