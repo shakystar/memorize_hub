@@ -4,96 +4,107 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 /**
- * Control-plane schema for the Hub gateway. This DB holds ONLY identity and
- * access control — users, project-scoped API tokens, ACL, and beta access
- * requests. It NEVER stores event data: opaque per-project events live solely
- * in the relay's ndjson store. Keeping the two planes apart is what lets the
- * relay stay a dumb, vendor-neutral transport (see AGENTS.md "Decisions").
+ * Control-plane schema for the Hub gateway (Hub SoT H040). This DB holds ONLY
+ * identity and access control — accounts, API keys, stores, memberships, invites,
+ * personal stores. It NEVER stores event data: opaque per-store events live
+ * solely in the relay's ndjson store. Keeping the two planes apart is what lets
+ * the relay stay a dumb, vendor-neutral transport (Hub SoT H010).
+ *
+ * Data model is workspace-centric and unified (H040): a private project is the
+ * degenerate 1-member, non-invite-reachable `wsp_` store; a shared workspace is
+ * the same store grown to N members. There is NO `project_acl` and NO
+ * `access_requests` — the beta gate is retired and membership is the sole access
+ * model (H080). `personal_stores` stays physically separate to structurally
+ * forbid cross-account access (H040 / memorize SoT-010).
  *
  * Migrations are applied via `PRAGMA user_version` (mirrors memorize's
- * src/storage/db.ts). Append future migrations to this array — never reorder
- * or mutate existing entries.
+ * src/storage/db.ts). Append future migrations — never reorder or mutate existing
+ * entries. There is no production data to migrate, so v1 is a single fresh schema.
  */
 const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
-  // v1 — users + project-scoped API tokens + ACL + beta access requests.
+  // v1 — accounts + API keys (+ scopes) + stores + memberships + invites +
+  // personal stores. Server-minted ids throughout (H050).
   (db) => {
     db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
-        id         TEXT PRIMARY KEY,
-        email      TEXT NOT NULL UNIQUE,
-        created_at TEXT NOT NULL
+      -- OAuth-rooted account. github_login is the stable handle; email is the
+      -- cross-channel anchor. A future 'plan' column (free/team/pro) is the
+      -- entitlements seam (H080) — NOT added now; plan is implicitly unlimited.
+      CREATE TABLE IF NOT EXISTS accounts (
+        id           TEXT PRIMARY KEY,          -- acc_…
+        email        TEXT NOT NULL UNIQUE,
+        github_login TEXT,
+        created_at   TEXT NOT NULL
       );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_github
+        ON accounts(github_login) WHERE github_login IS NOT NULL;
 
+      -- Account API key. read_only is the read/write axis; token_scopes is the
+      -- which-stores axis. Both only ever narrow access (docs/protocol README §3).
       CREATE TABLE IF NOT EXISTS api_tokens (
-        id           TEXT PRIMARY KEY,
-        user_id      TEXT NOT NULL REFERENCES users(id),
+        id           TEXT PRIMARY KEY,          -- tok_…
+        account_id   TEXT NOT NULL REFERENCES accounts(id),
         token_hash   TEXT NOT NULL UNIQUE,
         prefix       TEXT NOT NULL,
         label        TEXT,
+        read_only    INTEGER NOT NULL DEFAULT 0,
         created_at   TEXT NOT NULL,
         revoked_at   TEXT,
         last_used_at TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_tokens_hash ON api_tokens(token_hash);
-      CREATE INDEX IF NOT EXISTS idx_tokens_user ON api_tokens(user_id);
+      CREATE INDEX IF NOT EXISTS idx_tokens_account ON api_tokens(account_id);
 
-      CREATE TABLE IF NOT EXISTS project_acl (
-        project_id TEXT NOT NULL,
-        user_id    TEXT NOT NULL REFERENCES users(id),
-        role       TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        PRIMARY KEY (project_id, user_id)
-      );
-      CREATE INDEX IF NOT EXISTS idx_acl_user ON project_acl(user_id);
-
-      CREATE TABLE IF NOT EXISTS access_requests (
-        id                   TEXT PRIMARY KEY,
-        email                TEXT NOT NULL,
-        requested_project_id TEXT NOT NULL,
-        note                 TEXT,
-        status               TEXT NOT NULL,
-        created_at           TEXT NOT NULL,
-        decided_at           TEXT
-      );
-      CREATE INDEX IF NOT EXISTS idx_requests_status ON access_requests(status);
-    `);
-  },
-  // v2 — link a user row to its GitHub identity (participant self-service login).
-  // email stays the cross-channel anchor; github_login is the stable handle for
-  // OAuth users and is unique when present (anonymous /beta users leave it null).
-  (db) => {
-    db.exec(`
-      ALTER TABLE users ADD COLUMN github_login TEXT;
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_github
-        ON users(github_login) WHERE github_login IS NOT NULL;
-    `);
-  },
-  // v3 — per-key scoping (M4). A key may be limited to a subset of its user's
-  // projects (no scope rows = all of them, the legacy default) and/or marked
-  // read-only. Both only ever narrow access below the user's project_acl role;
-  // they never widen it.
-  (db) => {
-    db.exec(`
-      ALTER TABLE api_tokens ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0;
+      -- A key narrowed to a set of store ids (empty rows = unscoped = all the
+      -- account's stores). Scoped keys are data-plane only (README §3).
       CREATE TABLE IF NOT EXISTS token_scopes (
-        token_id   TEXT NOT NULL REFERENCES api_tokens(id),
-        project_id TEXT NOT NULL,
-        PRIMARY KEY (token_id, project_id)
+        token_id TEXT NOT NULL REFERENCES api_tokens(id),
+        store_id TEXT NOT NULL,
+        PRIMARY KEY (token_id, store_id)
       );
       CREATE INDEX IF NOT EXISTS idx_scopes_token ON token_scopes(token_id);
-    `);
-  },
-  // v4 — per-account personal memory store. A signed-in account owns exactly one
-  // opaque event log (its global, cross-project personal memory), keyed by
-  // store_id on the relay just like a project. Unlike a project it is NEVER
-  // grantable or shareable: only the owning account's keys reach it (enforced in
-  // the proxy's owner-only gate). This table holds only the account→store mapping;
-  // the events themselves live in the relay, opaque, exactly like project events.
-  (db) => {
-    db.exec(`
+
+      -- A project/workspace store. invite_reachable=false => private project
+      -- (degenerate 1-member workspace); flips true on first invite (H040/H020).
+      CREATE TABLE IF NOT EXISTS stores (
+        store_id         TEXT PRIMARY KEY,       -- wsp_…
+        invite_reachable INTEGER NOT NULL DEFAULT 0,
+        name             TEXT,
+        created_by       TEXT NOT NULL REFERENCES accounts(id),
+        created_at       TEXT NOT NULL
+      );
+
+      -- Replaces project_acl. Two roles only (owner/member, SoT-040). read_only
+      -- is a KEY attribute, not a role.
+      CREATE TABLE IF NOT EXISTS memberships (
+        store_id   TEXT NOT NULL REFERENCES stores(store_id),
+        account_id TEXT NOT NULL REFERENCES accounts(id),
+        role       TEXT NOT NULL,                -- 'owner' | 'member'
+        joined_at  TEXT NOT NULL,
+        PRIMARY KEY (store_id, account_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_memberships_account ON memberships(account_id);
+
+      -- Revocable, multi-use, optionally-expiring join capability. Always grants
+      -- 'member' in v1 (Fork 2); role column reserved for future promotion links.
+      CREATE TABLE IF NOT EXISTS invites (
+        invite_id   TEXT PRIMARY KEY,            -- inv_…
+        store_id    TEXT NOT NULL REFERENCES stores(store_id),
+        token_hash  TEXT NOT NULL UNIQUE,
+        role        TEXT NOT NULL DEFAULT 'member',
+        max_uses    INTEGER,                     -- NULL = unlimited
+        used_count  INTEGER NOT NULL DEFAULT 0,
+        expires_at  TEXT,                        -- NULL = never
+        revoked_at  TEXT,
+        created_by  TEXT NOT NULL REFERENCES accounts(id),
+        created_at  TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_invites_store ON invites(store_id);
+
+      -- Per-account personal memory store (psm_). Owner-only, never grantable,
+      -- kept physically separate from stores/memberships (H040 / SoT-010).
       CREATE TABLE IF NOT EXISTS personal_stores (
-        user_id    TEXT PRIMARY KEY REFERENCES users(id),
-        store_id   TEXT NOT NULL UNIQUE,
+        account_id TEXT PRIMARY KEY REFERENCES accounts(id),
+        store_id   TEXT NOT NULL UNIQUE,         -- psm_…
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_personal_store_id ON personal_stores(store_id);
@@ -137,8 +148,8 @@ function enableWalWithRetry(db: Database.Database): void {
 
 /**
  * Open (creating if needed) the gateway control-plane DB at `dbFile`, applying
- * pragmas + migrations. Uncached: the gateway opens one handle at boot. ':memory:'
- * is supported for tests.
+ * pragmas + migrations. Uncached: the gateway opens one handle at boot.
+ * ':memory:' is supported for tests.
  */
 export function openGatewayDb(dbFile: string): Database.Database {
   if (dbFile !== ':memory:') {

@@ -2,7 +2,7 @@
   "name": "@shakystar/memorize-hub-relay",
   "version": "0.1.0",
   "private": true,
-  "license": "AGPL-3.0-or-later",
+  "license": "SEE LICENSE IN LICENSE.md",
   "author": "shakystar",
   "description": "Optional relay server for memorize's cross-machine auto sync — a dumb store-and-forward queue of opaque per-project event logs over HTTP.",
   "type": "module",

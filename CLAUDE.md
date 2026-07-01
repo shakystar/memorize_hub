@@ -4,8 +4,10 @@ This file orients Claude Code when working in the `memorize_hub` repo.
 
 ## Start here
 
-Read **[`AGENTS.md`](./AGENTS.md)** (what this is, design direction, roadmap)
-and **[`PROTOCOL.md`](./PROTOCOL.md)** (the authoritative HTTP wire contract).
+Read **[`AGENTS.md`](./AGENTS.md)** (what this is, design direction, roadmap),
+**[`PROTOCOL.md`](./PROTOCOL.md)** (the authoritative HTTP wire contract), and
+**[`docs/SoT/`](./docs/SoT/)** (Hub architecture Source-of-Truth: 2-plane
+boundary, workspace transport, control-plane model, identifiers, security).
 
 ## One-line
 
@@ -33,7 +35,7 @@ The sibling `memorize` repo holds the client.
 - **The gateway (`packages/gateway`) is a separate component**: it MAY take
   runtime deps (e.g. `better-sqlite3`) and calls the relay as a separate process
   over HTTP, never importing its `EventStore`. Its DB holds only
-  users/tokens/ACL - never event data.
+  identity/tokens/ACL/membership - never event data.
 - memorize is **local-first**: the relay is always optional and must never
   become a hard dependency of memorize.
 
@@ -55,6 +57,11 @@ The sibling `memorize` repo holds the client.
   - **Personal-memory store** (2026-06-30, #32) - per-account owner-only `psm_`
     store + `GET /v1/account/personal-store` discovery; client side tracked in
     memorize#213.
+  - **Shared workspace** (designed 2026-07-01, `docs/SoT/`) - cross-account union
+    sync via server-minted `wsp_` stores + gateway membership/roles/invites; wire
+    in `docs/protocol/workspace.md` (endpoint set fully specced; PROTOCOL.md is now
+    a thin index over `docs/protocol/`). Gateway rebuild pending (new package +
+    ported clean core); relay untouched. All remote store ids now server-minted (H050).
   - **Remaining** - M5 *validation* only (onboard a real beta participant,
     measure live cross-device convergence); then "Later": relay
     retention/compaction, realtime SSE push (memorize P3-c).
@@ -64,9 +71,10 @@ Root `pnpm -r check` = typecheck + lint + test across both packages.
 **Scope note (revised 2026-06-26):** this repo is the **Hub umbrella** =
 `packages/relay` (transport) + `packages/gateway` (control-plane / the #92 read
 surface's auth+request layer). The relay *package* remains transport-only - keep
-projection/query/MCP/identity out of it. The remote MCP read surface (dashboards,
-multi-user queries over event data) is still a separate headless memorize replica
-that consumes the relay; do not grow that into the relay either.
+projection/query/MCP/identity out of it. The remote MCP read/write surface
+(dashboards, multi-user queries, and UI-authored edits over event data) is still a
+separate headless memorize replica that consumes the relay; do not grow that into
+the relay either.
 
 <!-- memorize:ground-rule v=1 start -->
 ## Memorize ground rule

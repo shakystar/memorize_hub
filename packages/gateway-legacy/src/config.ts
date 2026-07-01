@@ -3,35 +3,35 @@
 export interface GatewayConfig {
   /** Public listen port (the gateway is the only public-facing surface). */
   port: number;
-  /** Path to the control-plane sqlite DB (accounts/keys/stores/memberships/invites). */
+  /** Path to the control-plane sqlite DB (users/tokens/ACL/requests). */
   dbFile: string;
   /** Internal relay base URL — reached over localhost / a private network. */
   relayUrl: string;
   /** Bearer token the gateway presents to the (token-gated) relay. */
   relayToken: string | undefined;
-  /** Public base URL — used for join/invite URLs and the OAuth callback. */
+  /** Public base URL — used for copy on the request page and the OAuth callback. */
   publicUrl: string | undefined;
-  /** GitHub OAuth app client id (browser session login: /account, /join, /admin). */
+  /** GitHub OAuth app client id (operator dashboard login). */
   githubClientId: string | undefined;
   /** GitHub OAuth app client secret. */
   githubClientSecret: string | undefined;
-  /** GitHub logins allowed to operate the /admin dashboard. */
+  /** GitHub logins allowed to operate the dashboard. */
   adminLogins: string[];
-  /** HMAC secret for signing session + OAuth state cookies. */
+  /** HMAC secret for signing operator session + OAuth state cookies. */
   sessionSecret: string | undefined;
 }
 
 /** The operator dashboard is enabled only when OAuth is fully configured. */
 export function adminEnabled(config: GatewayConfig): boolean {
-  return sessionLoginEnabled(config) && config.adminLogins.length > 0;
+  return participantLoginEnabled(config) && config.adminLogins.length > 0;
 }
 
 /**
- * Browser session login (/account, /join) needs OAuth + session config. With no
- * beta gate (Hub SoT H080), any GitHub account may sign in — the allowlist only
- * gates the operator /admin surface, not participation.
+ * Participant self-service login (/account) needs the same OAuth + session
+ * config as the operator dashboard, minus the operator allowlist — anyone with
+ * a GitHub account may sign in and request access.
  */
-export function sessionLoginEnabled(config: GatewayConfig): boolean {
+export function participantLoginEnabled(config: GatewayConfig): boolean {
   return Boolean(
     config.githubClientId &&
       config.githubClientSecret &&

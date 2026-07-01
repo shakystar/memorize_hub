@@ -1,2 +1,5 @@
 packages:
   - 'packages/*'
+  # Frozen pre-rebuild gateway kept on disk as reference only — never built,
+  # never part of `pnpm -r`. The clean rebuild lives in packages/gateway.
+  - '!packages/gateway-legacy'
