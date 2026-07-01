@@ -117,14 +117,14 @@ export function WorkspaceSettings({
           </p>
         </div>
 
-        <div className="grid min-h-[22rem] grid-cols-[11rem_1fr]">
+        <div className="grid h-[34rem] max-h-[80vh] grid-cols-[12rem_1fr]">
           <nav className="space-y-1 border-r border-border p-3">
             {tabBtn('members', 'Members')}
             {isOwner && tabBtn('invites', 'Invites')}
             {isOwner && tabBtn('general', 'General')}
           </nav>
 
-          <div className="max-h-[70vh] overflow-y-auto p-6">
+          <div className="min-h-0 overflow-y-auto p-6">
             {error && (
               <p className="mb-4 rounded-md border border-destructive px-3 py-2 text-sm text-destructive">
                 {error}
