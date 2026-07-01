@@ -1,0 +1,107 @@
+@import 'tailwindcss';
+
+/*
+ * shadcn/ui token layer, but sourced from GitHub Primer values (matching the
+ * gateway's server-rendered pages) instead of shadcn's default neutrals. shadcn
+ * components read --background/--foreground/--primary/... ; we define those with
+ * Primer hex and switch on prefers-color-scheme, so the whole app is Primer-toned
+ * with no class toggle.
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: 'Inter Variable', Inter, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+/*
+ * Palette borrowed from ../memorize_studio (src/styles/tokens.css): a calm,
+ * dark-first "Codex desktop" look with a single restrained blue accent. Dark is
+ * the default; light swaps under prefers-color-scheme. These feed the shadcn
+ * token names mapped above.
+ */
+:root {
+  --radius: 8px;
+  --background: #0d0e11;
+  --foreground: #e6e8ec;
+  --card: #15171c;
+  --card-foreground: #e6e8ec;
+  --popover: #1c1f26;
+  --popover-foreground: #e6e8ec;
+  --primary: #6e9bff;
+  --primary-foreground: #0d0e11;
+  --secondary: #15171c;
+  --secondary-foreground: #e6e8ec;
+  --muted: #15171c;
+  --muted-foreground: #9aa1ad;
+  --accent: #1c1f26;
+  --accent-foreground: #e6e8ec;
+  --destructive: #d96a6a;
+  --destructive-foreground: #0d0e11;
+  --border: #23262e;
+  --input: #23262e;
+  --ring: #6e9bff;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #f7f8fa;
+    --foreground: #1a1d23;
+    --card: #ffffff;
+    --card-foreground: #1a1d23;
+    --popover: #ffffff;
+    --popover-foreground: #1a1d23;
+    --primary: #3b6fe0;
+    --primary-foreground: #ffffff;
+    --secondary: #ffffff;
+    --secondary-foreground: #1a1d23;
+    --muted: #f7f8fa;
+    --muted-foreground: #525a66;
+    --accent: #eef1f6;
+    --accent-foreground: #1a1d23;
+    --destructive: #c4504f;
+    --destructive-foreground: #ffffff;
+    --border: #e3e6ea;
+    --input: #e3e6ea;
+    --ring: #3b6fe0;
+  }
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}

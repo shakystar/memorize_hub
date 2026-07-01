@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { upsertAccountByGithub } from './accounts.js';
 import { adminEnabled, sessionLoginEnabled } from './config.js';
 import type { GatewayContext } from './context.js';
-import { readBody } from './http.js';
+import { readBody, sendError, sendJson } from './http.js';
 import {
   issueApiKey,
   listAccountTokens,
@@ -228,7 +228,21 @@ export async function handleOAuthCallback(
     redirect(res, `/join?token=${encodeURIComponent(pendingJoin)}`, setCookies);
     return;
   }
-  redirect(res, '/account', setCookies);
+  redirect(res, '/app', setCookies);
+}
+
+/* ---------------------------------------------------------- account (JSON) --- */
+
+/** GET /account/me — the SPA's "who am I". Session cookie -> account JSON, else 401. */
+export function handleAccountMe(req: IncomingMessage, res: ServerResponse, ctx: GatewayContext): void {
+  const secret = ctx.config.sessionSecret;
+  const session = secret ? readAccount(req.headers.cookie, secret) : null;
+  if (!session) return sendError(res, 401, 'not signed in');
+  sendJson(res, 200, {
+    accountId: session.accountId,
+    login: session.login,
+    email: session.email,
+  });
 }
 
 /* ------------------------------------------------------------------ account --- */
@@ -257,7 +271,7 @@ export async function handleAccount(
     return;
   }
   if (req.method === 'GET' && path === '/account/logout') {
-    redirect(res, '/account', clearAccountCookie());
+    redirect(res, '/app', clearAccountCookie());
     return;
   }
 

@@ -1,161 +1,110 @@
-# Gateway web UX - diagnosis and redesign plan
+# 게이트웨이 웹 UX - 앱셸(워크스페이스 우선) 플랜
 
-> Status: DRAFT / plan (pre-implementation). Scope: the gateway's server-rendered
-> browser surface (`packages/gateway/src/web.ts` + `views.ts`). Written before the
-> design/UX pass so the redesign follows a plan, not ad-hoc edits. Styling stack is
-> already decided: server-rendered HTML + Tailwind v4 + Primer tokens (see the
-> web-UI project decision). This doc decides *information architecture and feature
-> placement*, not the visual token system.
+> 상태: DRAFT / 플랜(구현 전). 이전의 "설정 페이지 정리" 버전과 "서버-HTML 유지" 결정을
+> **폐기**한다. 근거: Hub SoT(무엇이 1급인가, read surface 위치) + 공식 ChatGPT 앱셸
+> 직접 분석(chatgpt.com, help.openai.com "Projects in ChatGPT") + OpenAI cookbook 스택.
+> memorize SoT/Hub SoT를 지키는 선에서 편의 기능은 개발이 제안·추가할 수 있다(예상을
+> 크게 벗어나지 않는 한).
 
-## 1. Why this doc
+## 0. 스택 결정 (2026-07-01 확정)
 
-Functionally the control-plane is complete (slices S1-S4 live). But the UI grew by
-stacking every feature onto one `/account` page, so the page is now a ~1500px
-single-column dump (identity + personal memory + workspaces + keys + connect). Two
-consequences follow:
+- 인증된 앱셸은 **Vite + React + TypeScript + Tailwind v4 + shadcn/ui + Lucide** 정적 SPA.
+- gateway가 그 정적 번들 + JSON API를 서빙하고, SPA는 **세션 쿠키**로 API를 호출한다.
+- 서버-HTML 유지: 공개/단순 흐름(랜딩 `/`, `/docs`, `/join`, `/oauth/callback`)은 그대로.
+- Next가 아니라 Vite인 이유: 우리는 백엔드(gateway)가 이미 있고 앱이 로그인 뒤 대시보드라
+  SSR/SEO 이득이 없다. Next의 서버 절반은 2번째 서버가 되어 control-plane을 복잡하게 한다.
 
-- it reads as dense and unstructured (the "getting ugly" complaint), and
-- several already-implemented capabilities have **no UI at all**, because a flat
-  page has nowhere to put per-workspace management.
+## 1. SoT가 정한 실제 구조
 
-So before styling, we fix the *structure*: what pages exist, and which feature
-lives where.
+- **1급 객체 = store/workspace(`wsp_`).** 제어평면은 workspace-중심 통일, private 프로젝트
+  = 1-멤버 워크스페이스. 계정/키/개인스토어는 **받치는** 계정-scope 객체 (H040, H050).
+- **gateway는 control-plane 전용.** 인증·coarse 인가·opaque 로그 프록시만. projection/query/
+  랭킹/도메인 렌더 금지 → 메모리 뷰를 gateway에 넣으면 2-plane 위반 (H010, H030).
+- **메모리 read/write surface**(워크스페이스 기억 브라우즈·쿼리·UI에서 기억 추가) =
+  **relay를 소비하는 별도 headless memorize replica**, 연기·trigger-gated. 트리거 중 하나가
+  "브라우저 워크스페이스 UI 수요" (H060, H900).
 
-## 2. Current state (as deployed, S4)
+귀결: 웹앱 = **셸 + auth 프레임**. 메인 캔버스는 그 replica가 채울 자리이며 **지금은 예약
+placeholder**. React SPA는 gateway control-plane JSON API의 클라이언트일 뿐이라 평면 경계를
+안 건드리고, 오히려 미래 read surface를 끼워넣기 쉽다.
 
-### 2.1 Routes that render HTML
+## 2. 공식 ChatGPT 셸 (직접 분석)
 
-| Route | Purpose | State |
-|---|---|---|
-| `GET /` | landing | done |
-| `GET /docs` | single quickstart page | minimal (one page, no sidebar/registry) |
-| `GET /account` | **single stacked page**: identity + personal + workspaces + keys + connect | done but overloaded |
-| `GET /account/login` `/logout` | OAuth entry / clear cookie | done |
-| `POST /account/workspaces` | create workspace | done |
-| `POST /account/workspaces/:id/invite` | mint invite (defaults only) | done |
-| `POST /account/workspaces/:id/leave` | self-leave | done |
-| `POST /account/keys` | mint key | done |
-| `POST /account/keys/:id/revoke` | revoke key | done |
-| `GET /oauth/callback` | shared OAuth return | done |
-| `GET /join?token=` | invite landing | done |
-| `/admin` | operator dashboard | placeholder only (503 / "coming soon") |
+chatgpt.com + help.openai.com "Projects in ChatGPT" 기준:
 
-### 2.2 Features on `/account` today
+- 좌측 사이드바: 상단 브랜드+접기 → 링크/도구군(새채팅·검색·이미지·앱·리서치) →
+  **중앙 프로젝트+recents** → 하단군(플랜·설정·도움말) → **최하단 계정**.
+- 메인: 상단 컨텍스트 스위처 + 중앙 작업면.
+- **프로젝트 = "smart workspace"**: 사이드바에서 New project로 생성, name+icon+color,
+  안에 chats/files/instructions/memory. **공유·설정**(초대·링크·access control·leave·delete)은
+  "..." 뒤의 2차 기능.
 
-1. Identity line (signed in as, sign out link)
-2. Personal memory card (psm_ id)
-3. Workspaces table (name / id / role / kind / members) + Create form + per-row
-   Invite (mint -> one-time joinUrl) + Leave
-4. API keys table (prefix / label / scope / last-used / revoke) + Generate form
-   (per-workspace scope checkboxes + read-only)
-5. Connect-a-machine command block
-
-## 3. Implemented vs surfaced (the gap)
-
-The control-plane API is richer than the UI exposes. This is the core finding.
-
-| Capability | API | UI today | Notes |
-|---|---|---|---|
-| Personal store discovery | done | shown (Overview) | ok |
-| Key issue / list / revoke / scope | done | shown | ok |
-| Workspace create / list | done | shown | ok |
-| Workspace **roster** (members) | done (`GET /v1/workspaces/:id`) | **none** | no place to show members |
-| Invite **mint** | done | partial (defaults only) | no maxUses / expiry control |
-| Invite **list** | done (`GET .../invites`) | **none** | owner cannot see active invites |
-| Invite **revoke** | done (`DELETE .../invites/:id`) | **none** | fire-and-forget only |
-| Member **role change** / ownership transfer | done (`PATCH .../members/:id`) | **none** | |
-| Member **remove (other)** | done (`DELETE .../members/:id`) | **none** | only self-leave is in UI |
-| Workspace **delete** | done (`DELETE /v1/workspaces/:id`) | **none** | only Leave (409 for last owner) |
-| Workspace **rename** | **no API** | none | genuinely missing |
-| Operator dashboard | none | placeholder | S5, optional |
-
-Reading: everything under "UI today = none" is **built and tested at the API
-layer** and just needs a surface. The one true gap is workspace rename (no API).
-
-## 4. Root problems
-
-1. **No workspace detail page.** A workspace is a rich object (members, roles,
-   invites, settings), but the UI treats it as a table row with two buttons. There
-   is nowhere to manage members or invites, so those endpoints are unreachable from
-   a browser. This is the biggest structural miss.
-2. **One overloaded page.** Four unrelated concerns share one scroll; no hierarchy.
-3. **Invite is fire-and-forget.** Mint shows a URL once; no list/revoke, so owners
-   lose track of live invites.
-4. **Cross-concern bleed.** Key-scope checkboxes list raw workspace ids inside the
-   key form - workspace identity belongs on the workspace surface.
-5. **Chrome gaps.** Header is a plain handle + link (no avatar/menu); content is
-   narrow (max-w-3xl) with large empty margins ill-suited to a settings layout.
-
-## 5. Proposed information architecture
-
-GitHub-settings pattern: a left sidebar inside `/account`, each item a real page.
-Widen the settings shell (max-w-5xl). Header gets an avatar + dropdown menu.
+## 3. 목표 IA (앱셸)
 
 ```
-/account                     Overview   -> identity, personal memory, connect quickstart
-/account/workspaces          Workspaces -> list (table) + create; row -> detail
-/account/workspaces/:id      Detail     -> the NEW page (see 5.1)
-/account/keys                API keys   -> list + generate (scope by workspace)
++---------------------+------------------------------------------------+
+| memorize Hub    [<] |  <workspace name>          [members]  [설정]   |
+|---------------------|                                                |
+|  Docs               |   +-----------------------------------------+  |
+|  GitHub             |   |                                         |  |
+|---------------------|   |   워크스페이스 메모리 (read/write surface) |  |
+|  WORKSPACES     [+] |   |   개발 예정 - headless replica (H060)     |  |
+|  # my-notes         |   |   지금은 비움 + sync 방법 안내만          |  |
+|  # team-notes     <-|   |                                         |  |
+|  # design           |   +-----------------------------------------+  |
+|      (빈 공간)       |                                                |
+|---------------------|                                                |
+| (avatar) @you       |   계정 = personal settings 진입                 |
++---------------------+------------------------------------------------+
 ```
 
-Header dropdown (avatar): Overview / Workspaces / API keys / Sign out.
+- **사이드바 상단 링크군**: Docs, GitHub 등 **실존 링크만**. (지어낸 codex 류 금지. 새 링크는
+  붙을 때 추가.)
+- **사이드바 중앙(주 spine)**: `WORKSPACES` 헤더 + `[+]` New, 그 아래 워크스페이스 리스트
+  (각 `wsp_`, 이름 표시, 선택 강조). private(1-멤버)·shared 모두 여기. New는 이 섹션 헤더
+  옆이지 Docs 위가 아니다.
+- **사이드바 최하단**: **계정** 아바타 → personal settings(API 키, 개인 메모리, 로그아웃).
+  계정은 구석이지 중심이 아니다.
+- **메인 상단바**: 선택된 워크스페이스 이름 + 멤버 요약 + **[설정]**(workspace settings 진입).
+- **메인 캔버스**: **read/write surface 자리 예약(H060)**. replica 나오기 전엔 **비움 +
+  "개발 예정" 명시 + sync 퀵스타트**만. gateway에 메모리 뷰를 직접 넣지 않는다.
 
-### 5.1 Workspace detail page (`/account/workspaces/:id`) - the missing surface
+## 4. personal settings ≠ workspace settings (둘 다 큰 영역)
 
-Sections on one focused page, gated by the caller's role:
+- **personal settings**(하단 계정): API 키 발급/목록/폐기·scope, 개인 메모리 id, 로그아웃.
+  계정 단위. (D1/D2 계정 콘텐츠가 여기로 재배치.)
+- **workspace settings**(워크스페이스 상단바 [설정]): 워크스페이스 단위. 지금 실제로 있는 건
+  **members / invites / roles / leave / delete**(D2 재배치). 그 외는 **개발 예정 라벨만**:
+  워크스페이스 이름/아이콘/색, opt-out publish 정책(H900), retention, (그리고 SoT 준수하는
+  편의 기능들). 억지로 채우지 않는다 - 비우거나 "개발 예정".
 
-- **Members** (any member sees; owner manages): roster with role. Owner gets
-  per-member `Make owner` / `Make member` (ownership transfer) and `Remove`.
-  Last-owner actions surface the 409 as an inline message.
-- **Invites** (owner): list active invites (uses / expiry / created), `Revoke`
-  each, and a `Create invite` form with optional maxUses + expiry.
-- **Settings**: `Leave` (any member; last owner blocked with guidance), `Delete
-  workspace` (owner; destructive confirm). `Rename` deferred until an API exists.
+## 5. "안 만드는 건 비우거나 개발 예정" 원칙
 
-This page surfaces roster + member-management + invite-list/revoke + delete - all
-already implemented - with zero new backend except rename.
+not-yet 기능은 밀도 있게 채우지 않는다. 메인 캔버스(read surface), workspace settings의
+미구현 항목, 붙지 않은 링크 = **빈 상태 또는 "개발 예정" 배지**. 이는 정직한 프레임이자
+미래 자리 예약이다.
 
-## 6. Feature placement (target)
+## 6. 남는 것 / 바뀌는 것
 
-| Feature | Page | New work |
-|---|---|---|
-| Identity, sign out | header dropdown + Overview | move |
-| Personal memory id | Overview | move |
-| Connect a machine | Overview | move |
-| Key list / generate / revoke | API keys | move |
-| Workspace list / create | Workspaces | move |
-| Workspace row -> detail link | Workspaces | new link |
-| Roster + member management | Workspace detail | **new UI over existing API** |
-| Invite list / mint (+opts) / revoke | Workspace detail | **new UI over existing API** |
-| Leave / delete workspace | Workspace detail (Settings) | **new UI over existing API** |
-| Rename workspace | Workspace detail (Settings) | needs new API (deferred) |
+- **그대로**: relay 전부; gateway의 API/DAL/auth/session/oauth/policy(검증된 코어)와 33개
+  테스트; 서버-HTML 랜딩·docs·/join·/oauth.
+- **바뀜**: 인증된 앱셸(`/account`+워크스페이스)이 React SPA로. D1/D2 서버-렌더 HTML 뷰
+  폐기(DAL/API 재사용). 계정 액션 일부를 세션-JSON 엔드포인트로 노출(대부분 `/v1/*`에 이미
+  있음; account keys/personal은 추가).
+- **추가**: 프론트 패키지 `packages/web`(Vite SPA) + Docker SPA 빌드 스텝 + gateway 정적 서빙.
 
-## 7. Phased plan
+## 7. 단계 (개정)
 
-- **D1 - shell + split (no new features).** Header avatar dropdown; widen; settings
-  sidebar; split `/account` into Overview / Workspaces / API keys, moving existing
-  features unchanged. Fixes the density complaint with zero backend change.
-  Deployable + screenshot-verifiable on its own.
-- **D2 - workspace detail page.** Add `/account/workspaces/:id` with Members,
-  Invites, Settings, plus the matching `/account/...` POST actions that call the
-  already-tested control-plane DAL. Surfaces roster + member admin + invite
-  management + delete.
-- **D3 - deferred, explicit.** Invite maxUses/expiry inputs (if not folded into
-  D2), workspace rename (new API `PATCH /v1/workspaces/:id`), `/admin` operator
-  dashboard (S5), and a real `/docs` registry. Each is a separate opt-in.
+- **R1 - 앱셸 프레임 + 프론트 스택**: `packages/web` 스캐폴딩(Vite/React/TS/Tailwind/shadcn),
+  gateway가 SPA 서빙 + 세션-JSON 인증 배선. 지속 사이드바(상단 링크 / 워크스페이스 리스트 /
+  하단 계정) + 메인(워크스페이스 상단바 + 예약 캔버스 placeholder). 새 백엔드 로직 0.
+- **R2 - 워크스페이스 메인뷰 + settings + personal settings**: 캔버스 placeholder(sync
+  퀵스타트) + [설정] 패널에 D2 콘텐츠(members/invites/roles/leave/delete) 기존 API로,
+  미구현은 "개발 예정". 계정 메뉴에 personal settings(키/개인메모리).
+- **R3 - 연기·gated**: headless replica read/write surface가 캔버스를 채움(H060/H900),
+  워크스페이스 이름/아이콘/색, rename API, opt-out 정책, `/admin`.
 
-Each phase ships as its own visual-first slice (build -> screenshot -> deploy),
-same cadence as S1-S4.
+## 8. 착수 전 확인이 필요한 것
 
-## 8. Decisions (signed off 2026-07-01)
-
-1. **Scope = D1 + D2.** D3 (rename, /admin, docs registry) is out of this pass, so
-   the redesign lands with **no new wire endpoints** - it only surfaces already
-   implemented + tested control-plane APIs.
-2. **Detail page shape = stacked sections** (Members / Invites / Settings on one
-   page). Sub-tabs only if it later grows.
-3. **Rename API deferred to D3.** `PATCH /v1/workspaces/:id` is the sole missing
-   backend and is intentionally left out of this pass (not a scope cut - a
-   sequencing choice).
-4. **Delete vs Leave**: both live on the detail Settings section; Delete is
-   owner-only and destructive (needs a confirm step).
+- "배포 전 필수 개발 항목"의 구체 목록(사용자 제공) → 그것만 실제로 만들고 나머지는
+  비움/개발예정. R1/R2 범위를 그 목록으로 확정한다.

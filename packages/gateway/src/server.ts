@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { handleAsset, isAssetPath } from './assets.js';
 import type { GatewayContext } from './context.js';
 import { sendError, sendJson } from './http.js';
+import { handleSpa, isSpaPath } from './spa.js';
 import { handleEventsProxy, handlePersonalStore } from './proxy.js';
 import {
   createWorkspace,
@@ -18,6 +19,7 @@ import {
 } from './workspace.js';
 import {
   handleAccount,
+  handleAccountMe,
   handleAdmin,
   handleDocs,
   handleJoinPage,
@@ -71,11 +73,13 @@ async function route(
   // --- public / liveness -------------------------------------------------
   if (method === 'GET' && p === '/healthz') return sendJson(res, 200, { ok: true });
   if (method === 'GET' && isAssetPath(p)) return handleAsset(res, p);
+  if (method === 'GET' && isSpaPath(p)) return handleSpa(res, p);
   if (method === 'GET' && p === '/') return handleLanding(req, res, ctx);
   if (method === 'GET' && (p === '/docs' || p.startsWith('/docs/'))) return handleDocs(req, res, ctx, url);
 
   // --- browser (session) surfaces ---------------------------------------
   if (method === 'GET' && p === '/oauth/callback') return handleOAuthCallback(req, res, ctx, url);
+  if (method === 'GET' && p === '/account/me') return handleAccountMe(req, res, ctx);
   if (p === '/account' || p.startsWith('/account/')) return handleAccount(req, res, ctx, url);
   if (p === '/admin' || p.startsWith('/admin/')) return handleAdmin(req, res, ctx, url);
   if (method === 'GET' && p === '/join') return handleJoinPage(req, res, ctx, url);
