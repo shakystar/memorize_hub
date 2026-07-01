@@ -11,8 +11,16 @@ import {
   tokenBelongsToAccount,
   type TokenSummary,
 } from './keys.js';
+import { mintInvite as dalMintInvite, redeemInvite } from './invites.js';
 import { getOrCreatePersonalStore } from './personal-store.js';
-import { createStore, listAccountStores, type AccountStore } from './stores.js';
+import {
+  createStore,
+  getStore,
+  listAccountStores,
+  memberRole,
+  removeMember as dalRemoveMember,
+  type AccountStore,
+} from './stores.js';
 import {
   beginLogin,
   clearStateCookie,
@@ -43,6 +51,15 @@ import { cmdBlock, copyScript, htmlEscape, layout, originFor } from './views.js'
 
 /** Account login asks for the email scope so we attach a verified email. */
 const ACCOUNT_SCOPE = 'read:user user:email';
+
+/** Short-lived cookie carrying a pending /join invite token across OAuth login. */
+const JOIN_COOKIE = 'hub_join';
+function setJoinCookie(token: string): string {
+  return `${JOIN_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=600`;
+}
+function clearJoinCookie(): string {
+  return `${JOIN_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`;
+}
 
 function sendHtml(
   res: ServerResponse,
@@ -191,10 +208,19 @@ export async function handleOAuthCallback(
     return;
   }
   const accountId = upsertAccountByGithub(db, resolved.login, resolved.email);
-  redirect(res, '/account', [
+  const setCookies = [
     accountCookie({ accountId, login: resolved.login, email: resolved.email }, secret),
     clearStateCookie,
-  ]);
+  ];
+  // A login started from a /join link stashes the invite token in `hub_join`; on
+  // return, resume the join instead of dropping the user on a bare /account.
+  const pendingJoin = parseCookies(req.headers.cookie)[JOIN_COOKIE];
+  if (pendingJoin) {
+    setCookies.push(clearJoinCookie());
+    redirect(res, `/join?token=${encodeURIComponent(pendingJoin)}`, setCookies);
+    return;
+  }
+  redirect(res, '/account', setCookies);
 }
 
 /* ------------------------------------------------------------------ account --- */
@@ -272,6 +298,41 @@ export async function handleAccount(
     return;
   }
 
+  // Mint an invite for a workspace the account owns; show the join URL once.
+  const inviteMatch = /^\/account\/workspaces\/([^/]+)\/invite$/.exec(path);
+  if (req.method === 'POST' && inviteMatch) {
+    const storeId = decodeURIComponent(inviteMatch[1]!);
+    if (memberRole(db, storeId, session.accountId) !== 'owner') {
+      const body = signedInView(ctx, session, origin, { notice: 'Only an owner can invite.' });
+      sendHtml(res, 403, layout({ title: 'memorize Hub — account', body, user: session }));
+      return;
+    }
+    const minted = dalMintInvite(db, storeId, session.accountId, {});
+    const joinUrl = `${origin}/join?token=${encodeURIComponent(minted.token)}`;
+    const body = signedInView(ctx, session, origin, { inviteJoinUrl: joinUrl });
+    sendHtml(res, 201, layout({ title: 'memorize Hub — account', body, user: session }));
+    return;
+  }
+
+  // Leave a workspace (self-leave). The last owner must transfer or delete first.
+  const leaveMatch = /^\/account\/workspaces\/([^/]+)\/leave$/.exec(path);
+  if (req.method === 'POST' && leaveMatch) {
+    const storeId = decodeURIComponent(leaveMatch[1]!);
+    const result = dalRemoveMember(db, storeId, session.accountId);
+    if (!result.ok && result.reason === 'last_owner') {
+      const body = signedInView(ctx, session, origin, {
+        notice: 'You are the last owner — transfer ownership or delete the workspace first.',
+      });
+      sendHtml(res, 409, layout({ title: 'memorize Hub — account', body, user: session }));
+      return;
+    }
+    const body = signedInView(ctx, session, origin, {
+      notice: result.ok ? 'Left the workspace.' : 'You are not a member of that workspace.',
+    });
+    sendHtml(res, 200, layout({ title: 'memorize Hub — account', body, user: session }));
+    return;
+  }
+
   const revokeMatch = /^\/account\/keys\/([^/]+)\/revoke$/.exec(path);
   if (req.method === 'POST' && revokeMatch) {
     const tokenId = decodeURIComponent(revokeMatch[1]!);
@@ -299,7 +360,9 @@ function signedOutView(): string {
 interface AccountFlash {
   /** A freshly minted key, shown exactly once. */
   issuedKey?: string;
-  /** A one-line status message (revoke, error). */
+  /** A freshly minted invite join URL, shown once for sharing. */
+  inviteJoinUrl?: string;
+  /** A one-line status message (revoke, leave, error). */
   notice?: string;
 }
 
@@ -323,6 +386,12 @@ function signedInView(
  ${cmdBlock(`memorize auth login --remote-url ${origin} --token ${flash.issuedKey}`)}
 </div>`
     : '';
+  const invite = flash.inviteJoinUrl
+    ? `<div class="mt-4 rounded-lg border border-attention-border bg-attention-subtle p-4">
+ <p class="text-sm font-semibold">Invite link — anyone with it can join as a member:</p>
+ ${cmdBlock(flash.inviteJoinUrl)}
+</div>`
+    : '';
 
   return `<div class="flex items-center justify-between gap-4">
  <h1 class="text-2xl font-bold">Your account</h1>
@@ -330,7 +399,7 @@ function signedInView(
 </div>
 <p class="mt-1 text-sm prose-muted">Signed in as <code class="font-mono">@${htmlEscape(session.login)}</code>
  (<code class="font-mono">${htmlEscape(session.email)}</code>)</p>
-${notice}${issued}
+${notice}${issued}${invite}
 
 <h2 class="mt-8 text-lg font-semibold">Personal memory</h2>
 <div class="card mt-2">
@@ -401,19 +470,28 @@ function workspacesView(workspaces: AccountStore[]): string {
         : `<span class="text-fg-muted">private</span>`;
       const name = w.name ? htmlEscape(w.name) : '<span class="text-fg-muted">—</span>';
       const role = w.role === 'owner' ? '<span class="text-fg">owner</span>' : 'member';
+      const id = htmlEscape(w.storeId);
+      const invite =
+        w.role === 'owner'
+          ? `<form method="POST" action="/account/workspaces/${id}/invite" class="inline m-0">
+   <button class="btn text-sm">Invite</button></form>`
+          : '';
+      const leave = `<form method="POST" action="/account/workspaces/${id}/leave" class="inline m-0">
+   <button class="btn text-sm">Leave</button></form>`;
       return `<tr class="border-t border-default">
  <td class="py-2 pr-4">${name}</td>
- <td class="py-2 pr-4"><code class="font-mono">${htmlEscape(w.storeId)}</code></td>
+ <td class="py-2 pr-4"><code class="font-mono">${id}</code></td>
  <td class="py-2 pr-4">${role}</td>
  <td class="py-2 pr-4">${kind}</td>
- <td class="py-2 pr-4 text-fg-muted">${w.memberCount}</td></tr>`;
+ <td class="py-2 pr-4 text-fg-muted">${w.memberCount}</td>
+ <td class="py-2"><div class="flex gap-2">${invite}${leave}</div></td></tr>`;
     })
     .join('');
   return `<div class="mt-2 overflow-x-auto"><table class="w-full text-sm">
  <thead><tr class="text-left text-fg-muted">
   <th class="pb-1 pr-4 font-medium">name</th><th class="pb-1 pr-4 font-medium">workspace id</th>
   <th class="pb-1 pr-4 font-medium">role</th><th class="pb-1 pr-4 font-medium">kind</th>
-  <th class="pb-1 pr-4 font-medium">members</th></tr></thead>
+  <th class="pb-1 pr-4 font-medium">members</th><th class="pb-1 font-medium"></th></tr></thead>
  <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -473,18 +551,59 @@ export function handleAdmin(
   sendHtml(res, 200, page('Operator dashboard', '<p class="prose-muted">Coming soon.</p>'));
 }
 
-/** GET /join?token=… — human invite landing. Built in S4. */
+/**
+ * GET /join?token=… — human invite landing. No session -> stash the token and go
+ * through GitHub login (the callback resumes here). With a session -> redeem the
+ * invite exactly as POST /v1/workspaces/join, then show a success page.
+ */
 export function handleJoinPage(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   ctx: GatewayContext,
-  _url: URL,
+  url: URL,
 ): void {
-  if (!sessionLoginEnabled(ctx.config)) {
+  const { config, db } = ctx;
+  if (!sessionLoginEnabled(config)) {
     sendHtml(res, 503, page('Accounts not configured', ''));
     return;
   }
-  sendHtml(res, 200, page('Join a workspace', '<p class="prose-muted">Invite redemption coming soon.</p>'));
+  const token = url.searchParams.get('token') ?? '';
+  if (!token) {
+    sendHtml(res, 400, page('Invalid invite', '<p class="prose-muted">This join link is missing its token.</p>'));
+    return;
+  }
+
+  const session = readAccount(req.headers.cookie, config.sessionSecret!);
+  if (!session) {
+    // Stash the token, then log in; the OAuth callback returns to /join?token=…
+    const { redirectTo, setCookie } = beginLogin(config, { flow: 'account', scope: ACCOUNT_SCOPE });
+    redirect(res, redirectTo, [setJoinCookie(token), setCookie]);
+    return;
+  }
+
+  const result = redeemInvite(db, token, session.accountId);
+  if (!result.ok) {
+    sendHtml(res, 403, page(
+      'Invite not valid',
+      '<p class="prose-muted">This invite is unknown, revoked, expired, or fully used. Ask the workspace owner for a fresh link.</p>',
+    ), { 'set-cookie': clearJoinCookie() });
+    return;
+  }
+  const store = getStore(db, result.storeId);
+  const name = store?.name ? htmlEscape(store.name) : result.storeId;
+  const origin = originFor(req, config);
+  const verb = result.alreadyMember ? 'You are already a member of' : 'You joined';
+  const body = `<h1 class="text-2xl font-bold">Workspace joined</h1>
+<p class="mt-2 prose-muted">${verb} <strong class="text-fg">${name}</strong>
+ (<code class="font-mono">${htmlEscape(result.storeId)}</code>).</p>
+<p class="mt-4 text-sm prose-muted">Generate a key on your <a href="/account" class="text-accent hover:underline">account</a>,
+ log in once per machine, then bind a local folder to this workspace to start syncing shared memory:</p>
+${cmdBlock(`memorize auth login --remote-url ${origin} --token YOUR_KEY`)}
+<p class="mt-4"><a href="/account" class="btn btn-primary">Go to your account</a></p>
+${copyScript()}`;
+  sendHtml(res, 200, layout({ title: 'memorize Hub — joined', body, user: session }), {
+    'set-cookie': clearJoinCookie(),
+  });
 }
 
 /* ----------------------------------------------------------------- helpers --- */

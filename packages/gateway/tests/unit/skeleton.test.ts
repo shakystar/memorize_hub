@@ -53,12 +53,6 @@ describe('gateway skeleton', () => {
     expect(res.status).toBe(404);
   });
 
-  it('501s a wired-but-unported control-plane route', async () => {
-    // Invite/join + member lifecycle land in S4; still a skeleton placeholder.
-    const res = await fetch(`${base}/v1/workspaces/join`, { method: 'POST' });
-    expect(res.status).toBe(501);
-  });
-
   it('routes the events data-plane path to the proxy (401 without a key)', async () => {
     const res = await fetch(`${base}/v1/projects/wsp_abc/events`);
     expect(res.status).toBe(401);
