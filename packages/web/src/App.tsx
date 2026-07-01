@@ -1,9 +1,11 @@
 import { BookText, Github, Plus, Settings, Users } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
+import { NewWorkspaceDialog } from '@/components/NewWorkspaceDialog';
+import { WorkspaceSettings } from '@/components/WorkspaceSettings';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { createWorkspace, getMe, listWorkspaces, type Me, type Workspace } from '@/lib/api';
+import { getMe, listWorkspaces, type Me, type Workspace } from '@/lib/api';
 
 function Sidebar({
   me,
@@ -95,7 +97,14 @@ function SidebarLink({ icon, label, href }: { icon: ReactNode; label: string; hr
   );
 }
 
-function WorkspaceView({ workspace }: { workspace: Workspace }) {
+function WorkspaceView({
+  workspace,
+  onOpenSettings,
+}: {
+  workspace: Workspace;
+  onOpenSettings: () => void;
+}) {
+  const origin = window.location.origin;
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border px-6 py-3">
@@ -106,17 +115,17 @@ function WorkspaceView({ workspace }: { workspace: Workspace }) {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm">
+          <Button variant="secondary" size="sm" onClick={onOpenSettings}>
             <Users /> {workspace.memberCount}
           </Button>
-          <Button variant="secondary" size="sm">
+          <Button variant="secondary" size="sm" onClick={onOpenSettings}>
             <Settings /> Settings
           </Button>
         </div>
       </div>
 
-      {/* main canvas: reserved for the memory read/write surface (H060) */}
-      <div className="flex flex-1 items-center justify-center p-6">
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 p-6">
+        {/* main canvas: reserved for the memory read/write surface (H060) */}
         <div className="max-w-md rounded-lg border border-dashed border-border p-8 text-center">
           <p className="text-sm font-medium">Workspace memory</p>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -126,6 +135,16 @@ function WorkspaceView({ workspace }: { workspace: Workspace }) {
           <p className="mt-3 inline-block rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
             개발 예정
           </p>
+        </div>
+
+        {/* sync quickstart */}
+        <div className="w-full max-w-xl">
+          <p className="text-xs text-muted-foreground">
+            Sync a local folder into this workspace (needs a key from your account, memorize 2.5.0+):
+          </p>
+          <pre className="mt-2 overflow-x-auto rounded-md border border-border bg-card px-3 py-2 text-xs font-mono">
+            memorize auth login --remote-url {origin} --token YOUR_KEY
+          </pre>
         </div>
       </div>
     </div>
@@ -144,28 +163,27 @@ export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [newOpen, setNewOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const refreshWorkspaces = useCallback(async () => {
+    const ws = await listWorkspaces();
+    setWorkspaces(ws);
+    return ws;
+  }, []);
 
   const load = useCallback(async () => {
     const m = await getMe();
     setMe(m);
     if (m) {
-      const ws = await listWorkspaces();
-      setWorkspaces(ws);
+      const ws = await refreshWorkspaces();
       setSelectedId((cur) => cur ?? ws[0]?.workspaceId ?? null);
     }
-  }, []);
+  }, [refreshWorkspaces]);
 
   useEffect(() => {
     void load();
   }, [load]);
-
-  const onCreate = useCallback(async () => {
-    const name = window.prompt('New workspace name (optional)');
-    if (name === null) return; // cancelled
-    const { workspaceId } = await createWorkspace(name.trim());
-    setWorkspaces(await listWorkspaces());
-    setSelectedId(workspaceId);
-  }, []);
 
   if (me === undefined) {
     return <CenteredCard>
@@ -187,6 +205,11 @@ export default function App() {
   }
 
   const selected = workspaces.find((w) => w.workspaceId === selectedId) ?? null;
+  const onChanged = async (opts?: { removed?: boolean }) => {
+    const ws = await refreshWorkspaces();
+    if (opts?.removed) setSelectedId(ws[0]?.workspaceId ?? null);
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden">
       <Sidebar
@@ -194,11 +217,11 @@ export default function App() {
         workspaces={workspaces}
         selectedId={selectedId}
         onSelect={setSelectedId}
-        onCreate={onCreate}
+        onCreate={() => setNewOpen(true)}
       />
       <main className="min-w-0 flex-1">
         {selected ? (
-          <WorkspaceView workspace={selected} />
+          <WorkspaceView workspace={selected} onOpenSettings={() => setSettingsOpen(true)} />
         ) : (
           <div className="flex h-full items-center justify-center p-6">
             <div className="max-w-md rounded-lg border border-dashed border-border p-8 text-center">
@@ -206,13 +229,31 @@ export default function App() {
               <p className="mt-2 text-sm text-muted-foreground">
                 Create a workspace to get started. A workspace with one member is a private project.
               </p>
-              <Button className="mt-4" onClick={onCreate}>
+              <Button className="mt-4" onClick={() => setNewOpen(true)}>
                 <Plus /> New workspace
               </Button>
             </div>
           </div>
         )}
       </main>
+
+      <NewWorkspaceDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        onCreated={(id) => {
+          void refreshWorkspaces();
+          setSelectedId(id);
+        }}
+      />
+      {selected && (
+        <WorkspaceSettings
+          me={me}
+          workspaceId={selected.workspaceId}
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          onChanged={onChanged}
+        />
+      )}
     </div>
   );
 }
