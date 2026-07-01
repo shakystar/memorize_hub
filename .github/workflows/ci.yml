@@ -67,7 +67,9 @@ jobs:
             [ "$code" = "200" ] && { echo "healthz ok"; break; }
             echo "waiting for healthz ($i): $code"; sleep 3
           done
-          for path in /healthz / /docs /beta; do
+          # /beta (legacy beta access-request page) was retired with open
+          # onboarding (SoT H080); it now 404s by design, so it's not smoked.
+          for path in /healthz / /docs; do
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$base$path")
             echo "$path -> $code"
             [ "$code" = "200" ]
