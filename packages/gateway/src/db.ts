@@ -142,6 +142,25 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
         ON accounts(provider_sub) WHERE provider_sub IS NOT NULL;
     `);
   },
+  // v4 — device authorization grant (RFC 8628, docs/protocol/device-auth.md). A
+  // short-lived record per `memorize login` attempt: pending -> approved (browser)
+  // -> consumed (poll). NO token column — the key is minted at collection and only
+  // its hash is stored (api_tokens), so plaintext keys are never persisted.
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS device_auth (
+        device_code    TEXT PRIMARY KEY,          -- opaque client-held secret
+        user_code      TEXT NOT NULL UNIQUE,      -- short human code (XXXX-XXXX)
+        account_id     TEXT REFERENCES accounts(id), -- NULL until approved
+        status         TEXT NOT NULL,             -- 'pending' | 'approved' | 'denied'
+        label          TEXT NOT NULL,             -- label for the key minted on collect
+        created_at     TEXT NOT NULL,
+        expires_at     TEXT NOT NULL,
+        last_polled_at TEXT                        -- drives slow_down pacing
+      );
+      CREATE INDEX IF NOT EXISTS idx_device_expires ON device_auth(expires_at);
+    `);
+  },
 ];
 
 function runMigrations(db: Database.Database): void {

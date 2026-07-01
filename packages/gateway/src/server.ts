@@ -7,6 +7,7 @@ import {
 } from './account-api.js';
 import { handleAsset, isAssetPath } from './assets.js';
 import type { GatewayContext } from './context.js';
+import { handleDeviceCode, handleDeviceToken } from './device-api.js';
 import { sendError, sendJson } from './http.js';
 import { handleSpa, isSpaPath } from './spa.js';
 import { handleEventsProxy, handlePersonalStore } from './proxy.js';
@@ -27,6 +28,8 @@ import {
   handleAccount,
   handleAccountMe,
   handleAdmin,
+  handleDeviceApprove,
+  handleDevicePage,
   handleDocs,
   handleJoinPage,
   handleLanding,
@@ -89,6 +92,12 @@ async function route(
   if (p === '/account' || p.startsWith('/account/')) return handleAccount(req, res, ctx, url);
   if (p === '/admin' || p.startsWith('/admin/')) return handleAdmin(req, res, ctx, url);
   if (method === 'GET' && p === '/join') return handleJoinPage(req, res, ctx, url);
+  if (method === 'GET' && p === '/device') return handleDevicePage(req, res, ctx, url);
+  if (method === 'POST' && p === '/device') return handleDeviceApprove(req, res, ctx);
+
+  // --- device authorization grant (no auth; device_code is the secret) --------
+  if (method === 'POST' && p === '/v1/device/code') return handleDeviceCode(req, res, ctx);
+  if (method === 'POST' && p === '/v1/device/token') return handleDeviceToken(req, res, ctx);
 
   // --- account discovery (API key) --------------------------------------
   if (method === 'GET' && p === '/v1/account/personal-store') return handlePersonalStore(req, res, ctx);
