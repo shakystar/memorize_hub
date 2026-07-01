@@ -8,7 +8,7 @@
     "jsx": "react-jsx",
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
+    /* shadcn/ui vendor components are not written for exactOptionalPropertyTypes. */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "esModuleInterop": true,

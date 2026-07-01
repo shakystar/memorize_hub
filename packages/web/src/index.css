@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
 /*
  * shadcn/ui token layer, but sourced from GitHub Primer values (matching the
