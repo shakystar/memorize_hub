@@ -18,11 +18,14 @@
   control-plane 메타데이터로 보관하며 클라이언트가 honor한다(Hub는 opaque라 강제 못 하는
   advisory). per-item이 아니라 **카테고리/층 단위** 필터다([[H040]] 참조; 두 해피패스는
   기본값만 쓴다).
-- **headless read/write surface** - 연기, 트리거-gated. #92 클라우드 쿼리·remote MCP·
-  대시보드·워크스페이스 웹 UI(사용자가 UI에서 기억·task·rule 추가/편집). **트리거**: 첫
-  claude.ai 소비자 / 로컬에 안 담기는 코퍼스 / 브라우저 UI 수요. 형태: relay를 소비하는
-  별도 memorize replica(read이자 write), 무게는 스펙트럼이나 컴포넌트 정체성은 불변
-  ([[H060]]).
+- **headless read/write surface** - **빌드 확정, 시퀀싱상 맨 마지막**(트리거-gating 폐기,
+  2026-07-01 방향 전환). #92 클라우드 쿼리·remote MCP·대시보드·워크스페이스 웹 UI
+  (사용자가 UI에서 기억·task·rule 추가/편집). **판단**: 이 surface가 있어야 일반 공개할
+  만한 제품이 된다 - 그래서 "혹시" 연기가 아니라 나머지(제어평면·전송·클라이언트)를 먼저
+  끝내고 마지막에 짓는 **확정 항목**이다. 트리거(첫 claude.ai 소비자 / 로컬에 안 담기는
+  코퍼스 / 브라우저 UI 수요)는 이제 게이트가 아니라 빌드를 앞당길 신호. 형태: relay를
+  소비하는 별도 memorize replica(read이자 write), 무게는 스펙트럼이나 컴포넌트 정체성은
+  불변([[H060]]).
 - **E2E 암호화** - 연기, 수요-gated(memorize SoT-070/900 상속, [[H070]]). 의도된 형태:
   store별 DEK를 등록 기기 public key로 envelope 래핑, 서버엔 래핑된 DEK + public key만.
   **착수 전 선결 = 복구 정책**(단일 기기 분실 시 영구 소실): 오프라인 복구키 / 서버 매개
@@ -40,7 +43,8 @@
 - **모든 원격 store id = server-minted** (2026-07-01 확정, [[H050]]): private 프로젝트도
   1-멤버 `wsp_`, `proj_`는 로컬+provenance. memorize SoT-020 문자 그대로.
 - **opt-out 위치** (2026-07-01): 위 "연기"로 방향 확정(워크스페이스-레벨 advisory 메타).
-- **read/write surface** (2026-07-01): trigger-gated 연기로 확정(위).
+- **read/write surface** (2026-07-01): 처음엔 trigger-gated 연기로 확정했으나 **같은 날
+  재결정** - 공개 제품에 필수라는 판단으로 **빌드 확정 + 로드맵 마지막 순번**으로 전환(위).
 
 ## SoT 밖 (아키텍처 불변식 아님)
 
