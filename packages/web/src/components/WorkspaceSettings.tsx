@@ -1,7 +1,15 @@
+import { Check, ChevronDown, Copy, Lock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import {
@@ -132,50 +140,90 @@ export function WorkspaceSettings({
             )}
 
             {tab === 'members' && (
-              <div className="divide-y divide-border">
-                {detail?.members.map((m) => {
-                  const self = m.accountId === me.accountId;
-                  const showLeave = self && detail.members.length > 1;
-                  const showRemove = !self && isOwner;
-                  return (
-                    <div key={m.accountId} className="flex items-center justify-between py-2 text-sm">
-                      <span>
-                        {m.githubLogin ? `@${m.githubLogin}` : m.accountId}
-                        {self && <span className="text-muted-foreground"> (you)</span>}
-                        <span className="ml-2 text-xs text-muted-foreground">{m.role}</span>
-                      </span>
-                      <div className="flex gap-2">
-                        {isOwner && (
+              <div>
+                <div className="divide-y divide-border">
+                  {detail?.members.map((m) => {
+                    const self = m.accountId === me.accountId;
+                    const showSelfLeave = self && detail.members.length > 1;
+                    return (
+                      <div key={m.accountId} className="flex items-center justify-between py-2.5 text-sm">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="flex size-7 items-center justify-center rounded-full border border-border bg-secondary text-xs">
+                            {(m.githubLogin ?? '?').slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="truncate">
+                            {m.githubLogin ? `@${m.githubLogin}` : m.accountId}
+                            {self && <span className="text-muted-foreground"> (you)</span>}
+                          </span>
+                        </div>
+                        {isOwner ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="gap-1 font-normal text-muted-foreground">
+                                {m.role} <ChevronDown className="size-3.5 opacity-60" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  if (m.role !== 'owner') void run(() => setMemberRole(workspaceId, m.accountId, 'owner'));
+                                }}
+                              >
+                                <Check className={cn('size-4', m.role === 'owner' ? 'opacity-100' : 'opacity-0')} /> Owner
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  if (m.role !== 'member') void run(() => setMemberRole(workspaceId, m.accountId, 'member'));
+                                }}
+                              >
+                                <Check className={cn('size-4', m.role === 'member' ? 'opacity-100' : 'opacity-0')} /> Member
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onSelect={() => {
+                                  if (!window.confirm(self ? 'Leave this workspace?' : 'Remove this member?')) return;
+                                  void run(() => removeMember(workspaceId, m.accountId), self ? { removed: true } : undefined);
+                                }}
+                              >
+                                {self ? 'Leave workspace' : 'Remove from workspace'}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : showSelfLeave ? (
                           <Button
-                            variant="secondary"
+                            variant="ghost"
                             size="sm"
-                            disabled={busy}
-                            onClick={() =>
-                              run(() =>
-                                setMemberRole(workspaceId, m.accountId, m.role === 'owner' ? 'member' : 'owner'),
-                              )
-                            }
-                          >
-                            {m.role === 'owner' ? 'Make member' : 'Make owner'}
-                          </Button>
-                        )}
-                        {(showLeave || showRemove) && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
+                            className="text-destructive"
                             disabled={busy}
                             onClick={() => {
-                              if (!window.confirm(self ? 'Leave this workspace?' : 'Remove this member?')) return;
-                              void run(() => removeMember(workspaceId, m.accountId), self ? { removed: true } : undefined);
+                              if (!window.confirm('Leave this workspace?')) return;
+                              void run(() => removeMember(workspaceId, m.accountId), { removed: true });
                             }}
                           >
-                            {self ? 'Leave' : 'Remove'}
+                            Leave
                           </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">{m.role}</span>
                         )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+
+                <div className="mt-5 flex items-start gap-3 rounded-md border border-border p-3">
+                  <Lock className="mt-0.5 size-4 text-muted-foreground" />
+                  <div className="text-sm">
+                    <p className="font-medium">
+                      {detail?.inviteReachable ? 'Anyone with an invite link' : 'Only people invited'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {detail?.inviteReachable
+                        ? 'Shared — an active invite link lets new people join as members.'
+                        : 'Private — create an invite link (Invites tab) to let others join.'}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -184,9 +232,16 @@ export function WorkspaceSettings({
                 {mintedUrl && (
                   <div className="mb-4 rounded-md border border-border bg-secondary p-3">
                     <p className="text-xs font-medium">Invite link (share it; shown once):</p>
-                    <code className="mt-1 block overflow-x-auto whitespace-nowrap text-xs font-mono">
-                      {mintedUrl}
-                    </code>
+                    <div className="mt-1 flex items-center gap-2">
+                      <code className="flex-1 overflow-x-auto whitespace-nowrap text-xs font-mono">{mintedUrl}</code>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void navigator.clipboard.writeText(mintedUrl)}
+                      >
+                        <Copy className="size-3.5" /> Copy link
+                      </Button>
+                    </div>
                   </div>
                 )}
                 <div className="divide-y divide-border">
