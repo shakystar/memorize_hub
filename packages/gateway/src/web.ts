@@ -254,13 +254,28 @@ export async function handleAccount(
   }
 
   const session = readAccount(req.headers.cookie, secret);
+
+  // --- GET section pages (settings sidebar) ---
   if (req.method === 'GET' && (path === '/account' || path === '/account/')) {
-    const body = session ? signedInView(ctx, session, origin) : signedOutView();
-    sendHtml(res, 200, layout({ title: 'memorize Hub — account', body, user: session }));
+    if (!session) {
+      sendHtml(res, 200, layout({ title: 'memorize Hub — account', body: signedOutView() }));
+      return;
+    }
+    sendAccount(res, 200, session, 'overview', overviewSection(ctx, session, origin));
+    return;
+  }
+  if (req.method === 'GET' && path === '/account/workspaces') {
+    if (!session) return redirect(res, '/account');
+    sendAccount(res, 200, session, 'workspaces', workspacesSection(ctx, session));
+    return;
+  }
+  if (req.method === 'GET' && path === '/account/keys') {
+    if (!session) return redirect(res, '/account');
+    sendAccount(res, 200, session, 'keys', keysSection(ctx, session, origin));
     return;
   }
 
-  // Authenticated mutations below.
+  // --- authenticated mutations (each re-renders its own section) ---
   if (!session) {
     redirect(res, '/account');
     return;
@@ -271,21 +286,16 @@ export async function handleAccount(
     const form = await readForm(req).catch(() => null);
     const nameRaw = (form?.get('name') ?? '').trim();
     if (nameRaw.length > 200) {
-      const body = signedInView(ctx, session, origin, { notice: 'Name must be at most 200 characters.' });
-      sendHtml(res, 400, layout({ title: 'memorize Hub — account', body, user: session }));
-      return;
+      const content = workspacesSection(ctx, session, { notice: 'Name must be at most 200 characters.' });
+      return sendAccount(res, 400, session, 'workspaces', content);
     }
     createStore(db, session.accountId, nameRaw.length > 0 ? nameRaw : undefined);
-    const body = signedInView(ctx, session, origin, {
-      notice: nameRaw ? `Workspace “${htmlEscape(nameRaw)}” created.` : 'Workspace created.',
-    });
-    sendHtml(res, 201, layout({ title: 'memorize Hub — account', body, user: session }));
-    return;
+    const notice = nameRaw ? `Workspace “${htmlEscape(nameRaw)}” created.` : 'Workspace created.';
+    return sendAccount(res, 201, session, 'workspaces', workspacesSection(ctx, session, { notice }));
   }
 
   // Mint a new API key. No workspaces checked -> an unscoped key (personal memory +
   // every workspace). Checking specific workspaces -> a data-plane-only scoped key.
-  // read_only is orthogonal.
   if (req.method === 'POST' && path === '/account/keys') {
     const form = await readForm(req).catch(() => null);
     const readOnly = form?.get('readonly') === '1';
@@ -293,9 +303,7 @@ export async function handleAccount(
     const storeIds = (form?.getAll('stores') ?? []).filter((s) => owned.has(s));
     const opts = storeIds.length > 0 ? { readOnly, storeIds } : { readOnly };
     const { plaintext } = issueApiKey(db, session.accountId, session.login, opts);
-    const body = signedInView(ctx, session, origin, { issuedKey: plaintext });
-    sendHtml(res, 201, layout({ title: 'memorize Hub — account', body, user: session }));
-    return;
+    return sendAccount(res, 201, session, 'keys', keysSection(ctx, session, origin, { issuedKey: plaintext }));
   }
 
   // Mint an invite for a workspace the account owns; show the join URL once.
@@ -303,15 +311,12 @@ export async function handleAccount(
   if (req.method === 'POST' && inviteMatch) {
     const storeId = decodeURIComponent(inviteMatch[1]!);
     if (memberRole(db, storeId, session.accountId) !== 'owner') {
-      const body = signedInView(ctx, session, origin, { notice: 'Only an owner can invite.' });
-      sendHtml(res, 403, layout({ title: 'memorize Hub — account', body, user: session }));
-      return;
+      const content = workspacesSection(ctx, session, { notice: 'Only an owner can invite.' });
+      return sendAccount(res, 403, session, 'workspaces', content);
     }
     const minted = dalMintInvite(db, storeId, session.accountId, {});
     const joinUrl = `${origin}/join?token=${encodeURIComponent(minted.token)}`;
-    const body = signedInView(ctx, session, origin, { inviteJoinUrl: joinUrl });
-    sendHtml(res, 201, layout({ title: 'memorize Hub — account', body, user: session }));
-    return;
+    return sendAccount(res, 201, session, 'workspaces', workspacesSection(ctx, session, { inviteJoinUrl: joinUrl }));
   }
 
   // Leave a workspace (self-leave). The last owner must transfer or delete first.
@@ -320,34 +325,39 @@ export async function handleAccount(
     const storeId = decodeURIComponent(leaveMatch[1]!);
     const result = dalRemoveMember(db, storeId, session.accountId);
     if (!result.ok && result.reason === 'last_owner') {
-      const body = signedInView(ctx, session, origin, {
+      const content = workspacesSection(ctx, session, {
         notice: 'You are the last owner — transfer ownership or delete the workspace first.',
       });
-      sendHtml(res, 409, layout({ title: 'memorize Hub — account', body, user: session }));
-      return;
+      return sendAccount(res, 409, session, 'workspaces', content);
     }
-    const body = signedInView(ctx, session, origin, {
-      notice: result.ok ? 'Left the workspace.' : 'You are not a member of that workspace.',
-    });
-    sendHtml(res, 200, layout({ title: 'memorize Hub — account', body, user: session }));
-    return;
+    const notice = result.ok ? 'Left the workspace.' : 'You are not a member of that workspace.';
+    return sendAccount(res, 200, session, 'workspaces', workspacesSection(ctx, session, { notice }));
   }
 
   const revokeMatch = /^\/account\/keys\/([^/]+)\/revoke$/.exec(path);
   if (req.method === 'POST' && revokeMatch) {
     const tokenId = decodeURIComponent(revokeMatch[1]!);
     if (!tokenBelongsToAccount(db, tokenId, session.accountId)) {
-      const body = signedInView(ctx, session, origin, { notice: 'That key is not yours.' });
-      sendHtml(res, 403, layout({ title: 'memorize Hub — account', body, user: session }));
-      return;
+      const content = keysSection(ctx, session, origin, { notice: 'That key is not yours.' });
+      return sendAccount(res, 403, session, 'keys', content);
     }
     revokeToken(db, tokenId);
-    const body = signedInView(ctx, session, origin, { notice: 'Key revoked.' });
-    sendHtml(res, 200, layout({ title: 'memorize Hub — account', body, user: session }));
-    return;
+    return sendAccount(res, 200, session, 'keys', keysSection(ctx, session, origin, { notice: 'Key revoked.' }));
   }
 
   sendHtml(res, 404, page('Not found', ''));
+}
+
+/** Render a section inside the account settings shell (sidebar + content). */
+function sendAccount(
+  res: ServerResponse,
+  status: number,
+  session: AccountSession,
+  active: AccountTab,
+  content: string,
+): void {
+  const body = accountShell(session, active, content);
+  sendHtml(res, status, layout({ title: 'memorize Hub — account', body, user: session, wide: true }));
 }
 
 function signedOutView(): string {
@@ -366,42 +376,57 @@ interface AccountFlash {
   notice?: string;
 }
 
-function signedInView(
-  ctx: GatewayContext,
-  session: AccountSession,
-  origin: string,
-  flash: AccountFlash = {},
-): string {
-  const personal = getOrCreatePersonalStore(ctx.db, session.accountId);
-  const tokens = listAccountTokens(ctx.db, session.accountId);
-  const workspaces = listAccountStores(ctx.db, session.accountId);
-  const notice = flash.notice
-    ? `<p class="mt-4 rounded-md border border-default bg-canvas-subtle px-4 py-2 text-sm">${flash.notice}</p>`
-    : '';
-  const issued = flash.issuedKey
-    ? `<div class="mt-4 rounded-lg border border-attention-border bg-attention-subtle p-4">
+type AccountTab = 'overview' | 'workspaces' | 'keys';
+
+/** The settings shell: a left sidebar of sections + the active section content. */
+function accountShell(session: AccountSession, active: AccountTab, content: string): string {
+  const item = (href: string, label: string, key: AccountTab): string => {
+    const cls =
+      active === key
+        ? 'bg-canvas-subtle font-semibold text-fg'
+        : 'text-fg-muted hover:bg-canvas-subtle hover:text-fg hover:no-underline';
+    return `<a href="${href}" class="block rounded-md px-3 py-2 text-sm ${cls}">${label}</a>`;
+  };
+  return `<div class="grid gap-8 md:grid-cols-[13rem_minmax(0,1fr)]">
+ <aside>
+  <h1 class="px-3 text-xl font-bold">Account</h1>
+  <p class="mb-3 px-3 text-xs text-fg-muted">@${htmlEscape(session.login)}</p>
+  <nav class="space-y-0.5">
+   ${item('/account', 'Overview', 'overview')}
+   ${item('/account/workspaces', 'Workspaces', 'workspaces')}
+   ${item('/account/keys', 'API keys', 'keys')}
+  </nav>
+ </aside>
+ <div class="min-w-0">${content}</div>
+</div>`;
+}
+
+function noticeBox(msg: string): string {
+  return `<p class="mt-4 rounded-md border border-default bg-canvas-subtle px-4 py-2 text-sm">${msg}</p>`;
+}
+function issuedKeyBox(origin: string, key: string): string {
+  return `<div class="mt-4 rounded-lg border border-attention-border bg-attention-subtle p-4">
  <p class="text-sm font-semibold">New API key — copy it now, it is shown only once:</p>
- <code class="mt-2 block overflow-x-auto whitespace-nowrap rounded-md border border-default bg-canvas-inset px-3 py-2 text-sm font-mono">${htmlEscape(flash.issuedKey)}</code>
+ <code class="mt-2 block overflow-x-auto whitespace-nowrap rounded-md border border-default bg-canvas-inset px-3 py-2 text-sm font-mono">${htmlEscape(key)}</code>
  <p class="mt-3 text-sm prose-muted">Log in once per host with it, then clone token-free:</p>
- ${cmdBlock(`memorize auth login --remote-url ${origin} --token ${flash.issuedKey}`)}
-</div>`
-    : '';
-  const invite = flash.inviteJoinUrl
-    ? `<div class="mt-4 rounded-lg border border-attention-border bg-attention-subtle p-4">
+ ${cmdBlock(`memorize auth login --remote-url ${origin} --token ${key}`)}
+</div>`;
+}
+function inviteBox(joinUrl: string): string {
+  return `<div class="mt-4 rounded-lg border border-attention-border bg-attention-subtle p-4">
  <p class="text-sm font-semibold">Invite link — anyone with it can join as a member:</p>
- ${cmdBlock(flash.inviteJoinUrl)}
-</div>`
-    : '';
+ ${cmdBlock(joinUrl)}
+</div>`;
+}
 
-  return `<div class="flex items-center justify-between gap-4">
- <h1 class="text-2xl font-bold">Your account</h1>
- <a href="/account/logout" class="text-sm text-fg-muted hover:text-fg hover:no-underline">Sign out</a>
-</div>
+/** Overview: identity, personal memory, connect-a-machine quickstart. */
+function overviewSection(ctx: GatewayContext, session: AccountSession, origin: string): string {
+  const personal = getOrCreatePersonalStore(ctx.db, session.accountId);
+  return `<h2 class="text-xl font-bold">Overview</h2>
 <p class="mt-1 text-sm prose-muted">Signed in as <code class="font-mono">@${htmlEscape(session.login)}</code>
- (<code class="font-mono">${htmlEscape(session.email)}</code>)</p>
-${notice}${issued}${invite}
+ (<code class="font-mono">${htmlEscape(session.email)}</code>).</p>
 
-<h2 class="mt-8 text-lg font-semibold">Personal memory</h2>
+<h3 class="mt-8 text-base font-semibold">Personal memory</h3>
 <div class="card mt-2">
  <p class="text-sm prose-muted">Your global, cross-project memory syncs to this
   account-scoped store. It is <strong class="text-fg">private</strong> — no other account,
@@ -409,21 +434,53 @@ ${notice}${issued}${invite}
  <p class="mt-3 text-sm">Personal store id: <code class="font-mono">${htmlEscape(personal.storeId)}</code></p>
 </div>
 
-<h2 class="mt-8 text-lg font-semibold">Workspaces</h2>
-${workspacesView(workspaces)}
-${createWorkspaceForm()}
-
-<h2 class="mt-8 text-lg font-semibold">API keys</h2>
-${keysView(tokens)}
-${generateKeyForm(workspaces)}
-
-<h2 class="mt-8 text-lg font-semibold">Connect a machine</h2>
-<p class="mt-1 text-sm prose-muted">Generate a key above, then log in once per host and
- clone token-free. Use <code class="font-mono">clone</code>, not
- <code class="font-mono">init</code> — <code class="font-mono">init</code> forks a new empty
- project that will not sync. Requires memorize 2.5.0+.</p>
+<h3 class="mt-8 text-base font-semibold">Connect a machine</h3>
+<p class="mt-1 text-sm prose-muted"><a href="/account/keys" class="text-accent hover:underline">Generate a key</a>,
+ then log in once per host and clone token-free. Use <code class="font-mono">clone</code>, not
+ <code class="font-mono">init</code> — <code class="font-mono">init</code> forks a new empty project
+ that will not sync. Requires memorize 2.5.0+.</p>
 ${cmdBlock(`memorize auth login --remote-url ${origin} --token YOUR_KEY`)}
 ${cmdBlock(`memorize project clone PROJECT_ID --remote-url ${origin}`)}
+${copyScript()}`;
+}
+
+/** Workspaces: the list + create form (+ invite/leave flash). */
+function workspacesSection(
+  ctx: GatewayContext,
+  session: AccountSession,
+  flash: AccountFlash = {},
+): string {
+  const workspaces = listAccountStores(ctx.db, session.accountId);
+  const notice = flash.notice ? noticeBox(flash.notice) : '';
+  const invite = flash.inviteJoinUrl ? inviteBox(flash.inviteJoinUrl) : '';
+  return `<h2 class="text-xl font-bold">Workspaces</h2>
+<p class="mt-1 text-sm prose-muted">A workspace with one member is a private project; invite
+ someone and it becomes a shared, union-synced store.</p>
+${notice}${invite}
+${workspacesView(workspaces)}
+<h3 class="mt-8 text-base font-semibold">Create a workspace</h3>
+${createWorkspaceForm()}
+${copyScript()}`;
+}
+
+/** API keys: the list + generate form (+ issued-key flash). */
+function keysSection(
+  ctx: GatewayContext,
+  session: AccountSession,
+  origin: string,
+  flash: AccountFlash = {},
+): string {
+  const tokens = listAccountTokens(ctx.db, session.accountId);
+  const workspaces = listAccountStores(ctx.db, session.accountId);
+  const notice = flash.notice ? noticeBox(flash.notice) : '';
+  const issued = flash.issuedKey ? issuedKeyBox(origin, flash.issuedKey) : '';
+  return `<h2 class="text-xl font-bold">API keys</h2>
+<p class="mt-1 text-sm prose-muted">Keys authenticate your machines. An unscoped key syncs
+ personal memory and every workspace; a scoped key is limited to the workspaces you pick.</p>
+${notice}${issued}
+${keysView(tokens)}
+<h3 class="mt-8 text-base font-semibold">Generate a key</h3>
+${generateKeyForm(workspaces)}
 ${copyScript()}`;
 }
 

@@ -42,7 +42,11 @@ function h(key: string) {
   return { authorization: `Bearer ${key}`, 'content-type': 'application/json' };
 }
 const post = (path: string, key: string, body?: unknown) =>
-  fetch(`${base}${path}`, { method: 'POST', headers: h(key), body: body ? JSON.stringify(body) : undefined });
+  fetch(`${base}${path}`, {
+    method: 'POST',
+    headers: h(key),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
 const del = (path: string, key: string) => fetch(`${base}${path}`, { method: 'DELETE', headers: h(key) });
 const patch = (path: string, key: string, body: unknown) =>
   fetch(`${base}${path}`, { method: 'PATCH', headers: h(key), body: JSON.stringify(body) });

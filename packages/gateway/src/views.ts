@@ -14,6 +14,8 @@ const GITHUB_URL = 'https://github.com/shakystar/memorize';
 export interface NavUser {
   /** GitHub login of the signed-in account, shown in the header. */
   login: string;
+  /** Verified email, shown in the account dropdown (optional). */
+  email?: string;
 }
 
 export interface LayoutOptions {
@@ -22,16 +24,41 @@ export interface LayoutOptions {
   body: string;
   /** The signed-in account, if any — swaps the header's Account link for a menu. */
   user?: NavUser | null;
-  /** Widen the shell — used by the docs sidebar layout. */
+  /** Widen the shell — used by the docs + settings layouts. */
   wide?: boolean;
+}
+
+/** The header account control: an avatar that opens a native <details> dropdown. */
+function accountMenu(user: NavUser | null | undefined): string {
+  if (!user) {
+    return `<a href="/account" class="text-fg-muted hover:text-fg hover:no-underline">Sign in</a>`;
+  }
+  const avatar = `https://github.com/${encodeURIComponent(user.login)}.png?size=48`;
+  const email = user.email
+    ? `<div class="truncate text-xs text-fg-muted">${htmlEscape(user.email)}</div>`
+    : '';
+  return `<details class="relative">
+ <summary class="flex items-center gap-2">
+  <img src="${avatar}" alt="@${htmlEscape(user.login)}" width="28" height="28"
+   class="h-7 w-7 rounded-full border border-default bg-canvas-subtle">
+ </summary>
+ <div class="shadow-menu absolute right-0 z-20 mt-2 w-60 rounded-lg border border-default bg-canvas p-1">
+  <div class="px-3 py-2">
+   <div class="text-sm font-semibold">@${htmlEscape(user.login)}</div>${email}
+  </div>
+  <div class="my-1 border-t border-default"></div>
+  <a href="/account" class="block rounded-md px-3 py-1.5 text-sm hover:bg-canvas-subtle hover:no-underline">Overview</a>
+  <a href="/account/workspaces" class="block rounded-md px-3 py-1.5 text-sm hover:bg-canvas-subtle hover:no-underline">Workspaces</a>
+  <a href="/account/keys" class="block rounded-md px-3 py-1.5 text-sm hover:bg-canvas-subtle hover:no-underline">API keys</a>
+  <div class="my-1 border-t border-default"></div>
+  <a href="/account/logout" class="block rounded-md px-3 py-1.5 text-sm text-danger hover:bg-canvas-subtle hover:no-underline">Sign out</a>
+ </div>
+</details>`;
 }
 
 /** Wrap a page body in the shared shell: sticky header nav + main + footer. */
 export function layout({ title, body, user, wide = false }: LayoutOptions): string {
-  const container = wide ? 'max-w-6xl' : 'max-w-3xl';
-  const accountLink = user
-    ? `<a href="/account" class="text-fg-muted hover:text-fg hover:no-underline">@${htmlEscape(user.login)}</a>`
-    : `<a href="/account" class="text-fg-muted hover:text-fg hover:no-underline">Account</a>`;
+  const container = wide ? 'max-w-5xl' : 'max-w-3xl';
   return `<!doctype html><html lang="en" class="bg-canvas text-fg"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${htmlEscape(title)}</title>
@@ -42,8 +69,8 @@ export function layout({ title, body, user, wide = false }: LayoutOptions): stri
   <a href="/" class="font-semibold text-fg hover:no-underline">memorize <span class="text-fg-muted">Hub</span></a>
   <nav class="flex items-center gap-5 text-sm">
    <a href="/docs" class="text-fg-muted hover:text-fg hover:no-underline">Docs</a>
-   ${accountLink}
    <a href="${GITHUB_URL}" class="text-fg-muted hover:text-fg hover:no-underline">GitHub</a>
+   ${accountMenu(user)}
   </nav>
  </div>
 </header>

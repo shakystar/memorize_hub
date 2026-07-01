@@ -87,6 +87,23 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Native <details> dropdown menu: hide the disclosure triangle so the summary can
+ * be a clean avatar/button trigger (the header account menu). */
+summary {
+  list-style: none;
+  cursor: pointer;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A soft elevation for popovers/menus that reads on both light and dark canvas. */
+.shadow-menu {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
 /*
  * A few Primer-flavored component classes for the recurring buttons/cards, so the
  * HTML strings stay readable instead of repeating long utility runs.
