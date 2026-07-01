@@ -5,6 +5,14 @@ import { AccountSettings } from '@/components/AccountSettings';
 import { NewWorkspaceDialog } from '@/components/NewWorkspaceDialog';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { getMe, listWorkspaces, type Me, type Workspace } from '@/lib/api';
 
@@ -71,18 +79,37 @@ function Sidebar({
       </nav>
 
       <div className="border-t border-border p-2">
-        <button
-          onClick={onOpenAccount}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-secondary"
-          title="Account settings"
-        >
-          <img
-            src={`https://github.com/${encodeURIComponent(me.login)}.png?size=48`}
-            alt=""
-            className="h-7 w-7 rounded-full border border-border bg-secondary"
-          />
-          <span className="truncate">@{me.login}</span>
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-secondary">
+              <img
+                src={`https://github.com/${encodeURIComponent(me.login)}.png?size=48`}
+                alt=""
+                className="h-7 w-7 rounded-full border border-border bg-secondary"
+              />
+              <span className="truncate">@{me.login}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="w-60">
+            <DropdownMenuLabel>
+              <div className="text-sm font-medium">@{me.login}</div>
+              <div className="truncate text-xs text-muted-foreground">{me.email}</div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onOpenAccount}>Account settings</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <a href="/docs" className="hover:no-underline">
+                Docs
+              </a>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <a href="/account/logout" className="text-destructive hover:no-underline">
+                Sign out
+              </a>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   );

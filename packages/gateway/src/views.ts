@@ -31,7 +31,7 @@ export interface LayoutOptions {
 /** The header account control: an avatar that opens a native <details> dropdown. */
 function accountMenu(user: NavUser | null | undefined): string {
   if (!user) {
-    return `<a href="/account" class="text-fg-muted hover:text-fg hover:no-underline">Sign in</a>`;
+    return `<a href="/app" class="text-fg-muted hover:text-fg hover:no-underline">Open app</a>`;
   }
   const avatar = `https://github.com/${encodeURIComponent(user.login)}.png?size=48`;
   const email = user.email

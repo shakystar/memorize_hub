@@ -98,7 +98,7 @@ export function handleLanding(req: IncomingMessage, res: ServerResponse, ctx: Ga
   Your project and personal memory, synced across every machine you work on — and
   shared with teammates when you want it.</p>
  <div class="mt-6 flex flex-wrap items-center gap-3">
-  <a href="/account" class="btn btn-primary">Get started</a>
+  <a href="/app" class="btn btn-primary">Open the app</a>
   <a href="/docs" class="text-accent hover:underline">Read the docs -&gt;</a>
  </div>
 </section>
