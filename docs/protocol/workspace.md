@@ -254,6 +254,17 @@ not recallable (SoT-040/050).
 
 Success -> `204`.
 
+### `PATCH /v1/workspaces/:workspaceId`
+
+Owner renames the workspace (display metadata only, never identity — the `wsp_`
+id is immutable).
+
+- **Auth:** owner -> `200`; member-not-owner -> `403`; non-member/unknown -> `404`.
+- **Body:** `{ "name": "..." | null }` — a string (<= 200 chars, else `400`) sets
+  the name; `null` or an empty/whitespace string clears it back to untitled.
+
+Response `200`: `{ "workspaceId": "wsp_...", "name": "..." | null }`.
+
 ### `DELETE /v1/workspaces/:workspaceId`
 
 Owner deletes the workspace: drops all memberships and invites (control-plane

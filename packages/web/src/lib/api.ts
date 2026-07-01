@@ -150,6 +150,17 @@ export async function deleteWorkspace(id: string): Promise<void> {
   await ok(res, `DELETE workspace`);
 }
 
+/** Rename a workspace (owner). Empty name clears it back to untitled. */
+export async function renameWorkspace(id: string, name: string): Promise<void> {
+  const res = await fetch(`/v1/workspaces/${q(id)}`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  await ok(res, 'PATCH workspace');
+}
+
 /* --- account (personal settings) -------------------------------------------- */
 
 export async function listKeys(): Promise<TokenSummary[]> {

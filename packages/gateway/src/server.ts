@@ -19,6 +19,7 @@ import {
   listWorkspaces,
   mintInvite,
   removeMember,
+  renameWorkspace,
   revokeInvite,
   setMemberRole,
 } from './workspace.js';
@@ -119,6 +120,7 @@ async function route(
   const wsId = WS_ID.exec(p);
   if (wsId) {
     if (method === 'GET') return getWorkspace(req, res, ctx, decode(wsId[1]));
+    if (method === 'PATCH') return renameWorkspace(req, res, ctx, decode(wsId[1]));
     if (method === 'DELETE') return deleteWorkspace(req, res, ctx, decode(wsId[1]));
   }
 

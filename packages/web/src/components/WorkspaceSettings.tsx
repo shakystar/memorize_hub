@@ -8,12 +8,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import {
   deleteWorkspace,
   getWorkspace,
   listInvites,
   mintInvite,
   removeMember,
+  renameWorkspace,
   revokeInvite,
   setMemberRole,
   type InviteRow,
@@ -212,7 +214,25 @@ export function WorkspaceSettings({
         {/* Settings */}
         <section>
           <h3 className="text-sm font-semibold">Settings</h3>
-          <div className="mt-2 flex flex-wrap gap-2">
+          {isOwner && detail && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const name = String(new FormData(e.currentTarget).get('name') ?? '');
+                void run(() => renameWorkspace(workspaceId, name));
+              }}
+              className="mt-2 flex items-end gap-2"
+            >
+              <div>
+                <label className="block text-xs text-muted-foreground">Name</label>
+                <Input name="name" defaultValue={detail.name ?? ''} maxLength={200} className="mt-1 w-64" />
+              </div>
+              <Button type="submit" variant="secondary" size="sm" disabled={busy}>
+                Save
+              </Button>
+            </form>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
             {isOwner && (
               <Button
                 variant="destructive"
@@ -228,7 +248,7 @@ export function WorkspaceSettings({
             )}
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Rename, icon/color, and publish policy —{' '}
+            Icon/color and publish policy —{' '}
             <span className="rounded-full border border-border px-2 py-0.5">개발 예정</span>
           </p>
         </section>

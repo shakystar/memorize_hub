@@ -18,6 +18,7 @@ import {
   listAccountStores,
   memberRole,
   removeMember as dalRemoveMember,
+  renameStore,
   roster,
   setRole as dalSetRole,
 } from './stores.js';
@@ -304,6 +305,33 @@ export function removeMember(
       : sendError(res, 404, 'not found');
   }
   sendNoContent(res);
+}
+
+/** PATCH /v1/workspaces/:id — rename (owner). Body: { name: string | null }. */
+export async function renameWorkspace(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: GatewayContext,
+  storeId: string,
+): Promise<void> {
+  const principal = resolvePrincipal(ctx, req);
+  if (!principal) return sendError(res, 401, 'authentication required');
+  const decision = authorize(ctx.db, principal, { kind: 'workspace', storeId }, 'admin');
+  if (!decision.ok) return sendError(res, decision.status, decision.error ?? 'forbidden');
+
+  let body: Record<string, unknown>;
+  try {
+    body = await readJson(req);
+  } catch (error) {
+    return sendError(res, (error as { statusCode?: number }).statusCode ?? 400, 'bad request');
+  }
+  const raw = body.name;
+  if (raw !== null && (typeof raw !== 'string' || raw.length > 200)) {
+    return sendError(res, 400, 'name must be a string of at most 200 characters, or null');
+  }
+  const name = typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null;
+  renameStore(ctx.db, storeId, name);
+  sendJson(res, 200, { workspaceId: storeId, name });
 }
 
 /** DELETE /v1/workspaces/:id — owner teardown (revokes all members). */

@@ -205,6 +205,11 @@ export function markInviteReachable(db: Database.Database, storeId: string): voi
   db.prepare('UPDATE stores SET invite_reachable = 1 WHERE store_id = ?').run(storeId);
 }
 
+/** Set (or clear, with null) a store's display name. Metadata only, never identity. */
+export function renameStore(db: Database.Database, storeId: string, name: string | null): void {
+  db.prepare('UPDATE stores SET name = ? WHERE store_id = ?').run(name, storeId);
+}
+
 /** Delete a store's control-plane rows (memberships + invites + store). Owner teardown. */
 export function deleteStore(db: Database.Database, storeId: string): void {
   const write = db.transaction(() => {
