@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
+import { handleAsset, isAssetPath } from './assets.js';
 import type { GatewayContext } from './context.js';
 import { sendError, sendJson } from './http.js';
 import { handleEventsProxy, handlePersonalStore } from './proxy.js';
@@ -69,6 +70,7 @@ async function route(
 
   // --- public / liveness -------------------------------------------------
   if (method === 'GET' && p === '/healthz') return sendJson(res, 200, { ok: true });
+  if (method === 'GET' && isAssetPath(p)) return handleAsset(res, p);
   if (method === 'GET' && p === '/') return handleLanding(req, res, ctx);
   if (method === 'GET' && (p === '/docs' || p.startsWith('/docs/'))) return handleDocs(req, res, ctx, url);
 

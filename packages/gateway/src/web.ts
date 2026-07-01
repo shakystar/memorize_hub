@@ -1,70 +1,306 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import { upsertAccountByGithub } from './accounts.js';
+import { adminEnabled, sessionLoginEnabled } from './config.js';
 import type { GatewayContext } from './context.js';
-import { notImplemented } from './http.js';
+import { getOrCreatePersonalStore } from './personal-store.js';
+import {
+  beginLogin,
+  clearStateCookie,
+  resolveLogin,
+  STATE_COOKIE_NAME,
+  verifyCallback,
+} from './oauth.js';
+import {
+  accountCookie,
+  clearAccountCookie,
+  operatorCookie,
+  parseCookies,
+  readAccount,
+  type AccountSession,
+} from './session.js';
+import { cmdBlock, copyScript, htmlEscape, layout, originFor } from './views.js';
 
 /**
- * Browser (session) surfaces (docs/protocol/README.md §6). These use the OAuth
- * session principal, not an API key: `/account` (self-service keys + workspaces),
- * `/admin` (operator dashboard, allowlist-gated), `/join` (human invite landing),
- * `/oauth/callback`. Ported from the legacy session/oauth/account/dashboard core.
+ * Browser (session) surfaces (docs/protocol/README.md §6): `/` landing, `/docs`,
+ * `/account` (self-service, GitHub OAuth), `/admin` (operator, allowlist-gated),
+ * `/join` (invite landing), and the shared `/oauth/callback`. These use the OAuth
+ * account session, not an API key.
  *
- * @remarks Skeleton — landing/health-ish pages are minimal; auth'd pages 501 until
- * the session/oauth core is ported. `_ctx`/`_url` unused until then.
+ * @remarks S1 slice — web shell + login. `/account` shows signed-in identity +
+ * personal-store discovery; key issuance (S2), workspace list (S3), `/join` (S4),
+ * and `/admin` (S5) land in later slices.
  */
 
-/** GET / — public landing. Minimal so uptime checks see a 200. */
-export function handleLanding(_req: IncomingMessage, res: ServerResponse, _ctx: GatewayContext): void {
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  res.end('<!doctype html><meta charset="utf-8"><title>memorize Hub</title><h1>memorize Hub</h1><p>Control-plane gateway. See /docs.</p>');
+/** Account login asks for the email scope so we attach a verified email. */
+const ACCOUNT_SCOPE = 'read:user user:email';
+
+function sendHtml(
+  res: ServerResponse,
+  status: number,
+  html: string,
+  extraHeaders: Record<string, string | string[]> = {},
+): void {
+  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', ...extraHeaders });
+  res.end(html);
 }
 
-/** GET /docs[/...] — public docs surface. */
+function redirect(res: ServerResponse, location: string, setCookie?: string | string[]): void {
+  const headers: Record<string, string | string[]> = { location };
+  if (setCookie) headers['set-cookie'] = setCookie;
+  res.writeHead(302, headers);
+  res.end();
+}
+
+/* ------------------------------------------------------------------ landing --- */
+
+export function handleLanding(req: IncomingMessage, res: ServerResponse, ctx: GatewayContext): void {
+  const origin = originFor(req, ctx.config);
+  const user = readNavUser(req, ctx);
+  const body = `
+<section class="py-8">
+ <h1 class="text-4xl font-bold tracking-tight">Cross-machine memory<br>for local-first agents.</h1>
+ <p class="mt-4 text-lg prose-muted max-w-2xl">A dumb store-and-forward relay plus a thin control-plane.
+  Your project and personal memory, synced across every machine you work on — and
+  shared with teammates when you want it.</p>
+ <div class="mt-6 flex flex-wrap items-center gap-3">
+  <a href="/account" class="btn btn-primary">Get started</a>
+  <a href="/docs" class="text-accent hover:underline">Read the docs -&gt;</a>
+ </div>
+</section>
+
+<section class="mt-6">
+ <p class="text-sm prose-muted mb-1">Connect a machine once, then clone any project token-free:</p>
+ ${cmdBlock(`memorize auth login --remote-url ${origin} --token YOUR_KEY`)}
+</section>
+
+<section class="mt-14 grid gap-4 sm:grid-cols-3">
+ <div class="card">
+  <h2 class="font-semibold">Personal memory</h2>
+  <p class="mt-1 text-sm prose-muted">A private, account-scoped store that follows you
+   across machines. Never shared, never grantable.</p>
+ </div>
+ <div class="card">
+  <h2 class="font-semibold">Shared workspaces</h2>
+  <p class="mt-1 text-sm prose-muted">Invite teammates into one event log; each member's
+   memory becomes the union, tagged by provenance.</p>
+ </div>
+ <div class="card">
+  <h2 class="font-semibold">Local-first</h2>
+  <p class="mt-1 text-sm prose-muted">The relay is always optional. Sync is
+   store-and-forward and append-only — outages self-heal, never lose data.</p>
+ </div>
+</section>
+${copyScript()}`;
+  sendHtml(res, 200, layout({ title: 'memorize Hub', body, user }));
+}
+
+/* --------------------------------------------------------------------- docs --- */
+
 export function handleDocs(
   _req: IncomingMessage,
   res: ServerResponse,
-  _ctx: GatewayContext,
+  ctx: GatewayContext,
   _url: URL,
 ): void {
-  notImplemented(res, 'GET /docs');
+  const user = readNavUser(_req, ctx);
+  const origin = originFor(_req, ctx.config);
+  const body = `
+<h1 class="text-2xl font-bold">Docs</h1>
+<p class="mt-2 prose-muted">Getting started with the memorize Hub. Full guides land as
+ the control-plane rebuild ships; this is the quickstart.</p>
+
+<h2 class="mt-8 text-lg font-semibold">1. Update memorize</h2>
+<p class="mt-1 text-sm prose-muted">Host login + token-free clone need memorize 2.5.0+.</p>
+${cmdBlock('memorize update')}
+
+<h2 class="mt-8 text-lg font-semibold">2. Get a key</h2>
+<p class="mt-1 text-sm prose-muted">Sign in at <a href="/account" class="text-accent hover:underline">/account</a>
+ with GitHub and generate an API key.</p>
+
+<h2 class="mt-8 text-lg font-semibold">3. Log in once per machine</h2>
+${cmdBlock(`memorize auth login --remote-url ${origin} --token YOUR_KEY`)}
+
+<h2 class="mt-8 text-lg font-semibold">4. Sync a project</h2>
+<p class="mt-1 text-sm prose-muted">Use <code class="font-mono">clone</code>, not
+ <code class="font-mono">init</code> — <code class="font-mono">init</code> forks a new
+ empty project that will not sync.</p>
+${cmdBlock(`memorize project clone PROJECT_ID --remote-url ${origin}`)}
+${copyScript()}`;
+  sendHtml(res, 200, layout({ title: 'memorize Hub — docs', body, user, wide: true }));
 }
 
-/** GET /oauth/callback — shared OAuth return point (session + /join flows). */
-export function handleOAuthCallback(
-  _req: IncomingMessage,
+/* ---------------------------------------------------------- oauth callback --- */
+
+export async function handleOAuthCallback(
+  req: IncomingMessage,
   res: ServerResponse,
-  _ctx: GatewayContext,
-  _url: URL,
-): void {
-  notImplemented(res, 'GET /oauth/callback');
+  ctx: GatewayContext,
+  url: URL,
+): Promise<void> {
+  const { config, db } = ctx;
+  if (!config.sessionSecret) {
+    sendHtml(res, 503, page('Login not configured', '<p class="prose-muted">OAuth is not set up on this Hub.</p>'));
+    return;
+  }
+  const secret = config.sessionSecret;
+
+  const cookieState = parseCookies(req.headers.cookie)[STATE_COOKIE_NAME];
+  const state = verifyCallback(url.searchParams.get('state') ?? undefined, cookieState, secret);
+  if (!state) {
+    sendHtml(res, 403, page('Login failed', '<p class="prose-muted">Invalid state. <a class="text-accent hover:underline" href="/account">Try again</a>.</p>'), { 'set-cookie': clearStateCookie });
+    return;
+  }
+  const code = url.searchParams.get('code');
+  if (!code) {
+    sendHtml(res, 400, page('Login failed', '<p class="prose-muted">Missing authorization code.</p>'), { 'set-cookie': clearStateCookie });
+    return;
+  }
+
+  if (state.flow === 'admin') {
+    if (!adminEnabled(config)) {
+      sendHtml(res, 503, page('Operator dashboard not configured', ''), { 'set-cookie': clearStateCookie });
+      return;
+    }
+    const resolved = await resolveLogin(config, code);
+    if (!resolved || !config.adminLogins.includes(resolved.login)) {
+      sendHtml(res, 403, page('Not authorized', '<p class="prose-muted">This GitHub account is not an operator.</p>'), { 'set-cookie': clearStateCookie });
+      return;
+    }
+    redirect(res, '/admin', [operatorCookie(resolved.login, secret), clearStateCookie]);
+    return;
+  }
+
+  // account flow
+  if (!sessionLoginEnabled(config)) {
+    sendHtml(res, 503, page('Accounts not configured', ''), { 'set-cookie': clearStateCookie });
+    return;
+  }
+  const resolved = await resolveLogin(config, code, { fetchEmail: true });
+  if (!resolved || !resolved.email) {
+    sendHtml(res, 403, page('Login failed', '<p class="prose-muted">Could not read a verified email from your GitHub account.</p>'), { 'set-cookie': clearStateCookie });
+    return;
+  }
+  const accountId = upsertAccountByGithub(db, resolved.login, resolved.email);
+  redirect(res, '/account', [
+    accountCookie({ accountId, login: resolved.login, email: resolved.email }, secret),
+    clearStateCookie,
+  ]);
 }
 
-/** /account[/...] — participant self-service (session; 503 if OAuth unconfigured). */
+/* ------------------------------------------------------------------ account --- */
+
 export function handleAccount(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
-  _ctx: GatewayContext,
-  _url: URL,
+  ctx: GatewayContext,
+  url: URL,
 ): void {
-  notImplemented(res, '/account');
+  const { config } = ctx;
+  if (!sessionLoginEnabled(config)) {
+    sendHtml(res, 503, page(
+      'Accounts not configured',
+      '<p class="prose-muted">Set <code class="font-mono">GITHUB_CLIENT_ID</code>/<code class="font-mono">SECRET</code>, <code class="font-mono">GATEWAY_PUBLIC_URL</code>, and <code class="font-mono">GATEWAY_SESSION_SECRET</code>.</p>',
+    ));
+    return;
+  }
+  const secret = config.sessionSecret!;
+  const path = url.pathname;
+
+  if (req.method === 'GET' && path === '/account/login') {
+    const { redirectTo, setCookie } = beginLogin(config, { flow: 'account', scope: ACCOUNT_SCOPE });
+    redirect(res, redirectTo, setCookie);
+    return;
+  }
+  if (req.method === 'GET' && path === '/account/logout') {
+    redirect(res, '/account', clearAccountCookie());
+    return;
+  }
+
+  const session = readAccount(req.headers.cookie, secret);
+  if (req.method === 'GET' && (path === '/account' || path === '/account/')) {
+    const body = session ? signedInView(ctx, session, originFor(req, config)) : signedOutView();
+    sendHtml(res, 200, layout({ title: 'memorize Hub — account', body, user: session }));
+    return;
+  }
+  // POST surfaces (key issuance, workspaces) land in later slices.
+  if (!session) {
+    redirect(res, '/account');
+    return;
+  }
+  sendHtml(res, 404, page('Not found', ''));
 }
 
-/** /admin[/...] — operator dashboard (session + allowlist; 503 if unconfigured). */
+function signedOutView(): string {
+  return `<h1 class="text-2xl font-bold">Your account</h1>
+<p class="mt-2 prose-muted max-w-xl">Sign in with GitHub to create workspaces, invite
+ teammates, and mint the API keys your machines sync with.</p>
+<p class="mt-6"><a class="btn btn-primary" href="/account/login">Sign in with GitHub</a></p>`;
+}
+
+function signedInView(ctx: GatewayContext, session: AccountSession, origin: string): string {
+  const personal = getOrCreatePersonalStore(ctx.db, session.accountId);
+  return `<div class="flex items-center justify-between gap-4">
+ <h1 class="text-2xl font-bold">Your account</h1>
+ <a href="/account/logout" class="text-sm text-fg-muted hover:text-fg hover:no-underline">Sign out</a>
+</div>
+<p class="mt-1 text-sm prose-muted">Signed in as <code class="font-mono">@${htmlEscape(session.login)}</code>
+ (<code class="font-mono">${htmlEscape(session.email)}</code>)</p>
+
+<h2 class="mt-8 text-lg font-semibold">Personal memory</h2>
+<div class="card mt-2">
+ <p class="text-sm prose-muted">Your global, cross-project memory syncs to this
+  account-scoped store. It is <strong class="text-fg">private</strong> — no other account,
+  project, or workspace can reach it, and it is never grantable. Any unscoped key syncs it.</p>
+ <p class="mt-3 text-sm">Personal store id: <code class="font-mono">${htmlEscape(personal.storeId)}</code></p>
+</div>
+
+<h2 class="mt-8 text-lg font-semibold">Connect a machine</h2>
+<p class="mt-1 text-sm prose-muted">Key issuance lands in the next slice. Once you have a
+ key, log in once per host, then clone token-free:</p>
+${cmdBlock(`memorize auth login --remote-url ${origin} --token YOUR_KEY`)}
+${copyScript()}`;
+}
+
+/* -------------------------------------------------------------------- admin --- */
+
+/** /admin[/...] — operator dashboard (session + allowlist). Built in S5. */
 export function handleAdmin(
   _req: IncomingMessage,
   res: ServerResponse,
-  _ctx: GatewayContext,
+  ctx: GatewayContext,
   _url: URL,
 ): void {
-  notImplemented(res, '/admin');
+  if (!adminEnabled(ctx.config)) {
+    sendHtml(res, 503, page('Operator dashboard not configured', ''));
+    return;
+  }
+  sendHtml(res, 200, page('Operator dashboard', '<p class="prose-muted">Coming soon.</p>'));
 }
 
-/** GET /join?token=… — human invite landing; session redeem of the join capability. */
+/** GET /join?token=… — human invite landing. Built in S4. */
 export function handleJoinPage(
   _req: IncomingMessage,
   res: ServerResponse,
-  _ctx: GatewayContext,
+  ctx: GatewayContext,
   _url: URL,
 ): void {
-  notImplemented(res, 'GET /join');
+  if (!sessionLoginEnabled(ctx.config)) {
+    sendHtml(res, 503, page('Accounts not configured', ''));
+    return;
+  }
+  sendHtml(res, 200, page('Join a workspace', '<p class="prose-muted">Invite redemption coming soon.</p>'));
+}
+
+/* ----------------------------------------------------------------- helpers --- */
+
+/** A minimal standalone page (no signed-in nav state needed). */
+function page(title: string, bodyHtml: string): string {
+  return layout({ title: `memorize Hub — ${title}`, body: `<h1 class="text-2xl font-bold">${htmlEscape(title)}</h1>${bodyHtml}` });
+}
+
+/** The signed-in account for header nav, if the session cookie is valid. */
+function readNavUser(req: IncomingMessage, ctx: GatewayContext): AccountSession | null {
+  if (!ctx.config.sessionSecret) return null;
+  return readAccount(req.headers.cookie, ctx.config.sessionSecret);
 }

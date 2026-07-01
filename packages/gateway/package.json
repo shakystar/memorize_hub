@@ -12,7 +12,9 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && pnpm build:css",
+    "build:css": "tailwindcss -i assets/app.css -o dist/public/app.css --minify",
+    "dev:css": "tailwindcss -i assets/app.css -o dist/public/app.css --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -23,11 +25,13 @@
     "better-sqlite3": "^12.2.0"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.1.0",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^25.6.0",
     "@typescript-eslint/eslint-plugin": "^8.58.1",
     "@typescript-eslint/parser": "^8.58.1",
     "eslint": "^10.2.0",
+    "tailwindcss": "^4.1.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.4"
