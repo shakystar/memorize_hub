@@ -275,10 +275,10 @@ export default function App() {
       <CenteredCard>
         <h1 className="text-lg font-semibold">memorize Hub</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Sign in with GitHub to manage workspaces and sync your memory.
+          Sign in with Google to manage workspaces and sync your memory.
         </p>
         <a href="/account/login" className="mt-5 inline-block">
-          <Button>Sign in with GitHub</Button>
+          <Button>Sign in with Google</Button>
         </a>
       </CenteredCard>
     );
