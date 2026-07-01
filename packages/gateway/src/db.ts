@@ -26,18 +26,19 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
   // personal stores. Server-minted ids throughout (H050).
   (db) => {
     db.exec(`
-      -- OAuth-rooted account. provider_sub is the stable Google OIDC sub; email
-      -- is the cross-channel anchor + display handle. A future 'plan' column
-      -- (free/team/pro) is the entitlements seam (H080) — NOT added now; plan is
-      -- implicitly unlimited.
+      -- OAuth-rooted account. github_login is the stable handle; email is the
+      -- cross-channel anchor. A future 'plan' column (free/team/pro) is the
+      -- entitlements seam (H080) — NOT added now; plan is implicitly unlimited.
+      -- (v3 renames github_login -> provider_sub for the Google-OIDC migration;
+      -- this v1 shape is immutable — it already ran on the live volume.)
       CREATE TABLE IF NOT EXISTS accounts (
         id           TEXT PRIMARY KEY,          -- acc_…
         email        TEXT NOT NULL UNIQUE,
-        provider_sub TEXT,
+        github_login TEXT,
         created_at   TEXT NOT NULL
       );
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_provider
-        ON accounts(provider_sub) WHERE provider_sub IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_github
+        ON accounts(github_login) WHERE github_login IS NOT NULL;
 
       -- Account API key. read_only is the read/write axis; token_scopes is the
       -- which-stores axis. Both only ever narrow access (docs/protocol README §3).
@@ -126,6 +127,19 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
         PRIMARY KEY (day, store_id)
       );
       CREATE INDEX IF NOT EXISTS idx_usage_day ON usage_daily(day);
+    `);
+  },
+  // v3 — Google-OIDC migration: the account handle is no longer a GitHub login but
+  // the provider's stable subject id. Rename the column (data preserved) and swap
+  // the partial unique index. On a fresh DB v1 created github_login; on the live
+  // volume (user_version=2) only this step runs. Existing rows keep their old value
+  // under the new name — harmless, since Google logins resolve by email anyway.
+  (db) => {
+    db.exec(`
+      ALTER TABLE accounts RENAME COLUMN github_login TO provider_sub;
+      DROP INDEX IF EXISTS idx_accounts_github;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_provider
+        ON accounts(provider_sub) WHERE provider_sub IS NOT NULL;
     `);
   },
 ];
