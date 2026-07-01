@@ -3,7 +3,7 @@
 상태(Status): Decision
 확정(Since): 2026-07-01
 대체함(Supersedes): —
-대체됨(Superseded-by): —
+대체됨(Superseded-by): H051 (proj_ 위상 서술 부분만; server-minted 발급·prefix 예약·relay prefix-blind 등 나머지는 유효)
 
 ## 진술 (Statement)
 
