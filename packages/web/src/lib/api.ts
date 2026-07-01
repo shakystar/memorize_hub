@@ -102,12 +102,15 @@ export async function listInvites(id: string): Promise<InviteRow[]> {
 }
 
 /** Mint an invite (owner); returns the one-time join URL. */
-export async function mintInvite(id: string): Promise<{ inviteId: string; joinUrl: string }> {
+export async function mintInvite(
+  id: string,
+  opts: { maxUses?: number | null; expiresAt?: string | null } = {},
+): Promise<{ inviteId: string; joinUrl: string }> {
   const res = await fetch(`/v1/workspaces/${q(id)}/invites`, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify(opts),
   });
   await ok(res, `POST invites`);
   return (await res.json()) as { inviteId: string; joinUrl: string };

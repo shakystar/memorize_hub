@@ -1,4 +1,4 @@
-import { BookText, Github, Plus, Settings, Users } from 'lucide-react';
+import { BookText, BrainCircuit, Github, Plus, Settings, Users } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
 import { AccountSettings } from '@/components/AccountSettings';
@@ -20,14 +20,18 @@ function Sidebar({
   me,
   workspaces,
   selectedId,
+  view,
   onSelect,
+  onSelectPersonal,
   onCreate,
   onOpenAccount,
 }: {
   me: Me;
   workspaces: Workspace[];
   selectedId: string | null;
+  view: 'workspace' | 'personal';
   onSelect: (id: string) => void;
+  onSelectPersonal: () => void;
   onCreate: () => void;
   onOpenAccount: () => void;
 }) {
@@ -42,6 +46,21 @@ function Sidebar({
       <nav className="px-2">
         <SidebarLink icon={<BookText />} label="Docs" href="/docs" />
         <SidebarLink icon={<Github />} label="GitHub" href="https://github.com/shakystar/memorize" />
+      </nav>
+
+      <div className="mx-2 my-2 border-t border-border" />
+      <nav className="px-2">
+        <button
+          onClick={onSelectPersonal}
+          className={cn(
+            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+            view === 'personal'
+              ? 'bg-secondary font-medium text-foreground'
+              : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+          )}
+        >
+          <BrainCircuit className="size-4" /> Personal memory
+        </button>
       </nav>
 
       <div className="mx-2 my-2 border-t border-border" />
@@ -64,7 +83,7 @@ function Sidebar({
               onClick={() => onSelect(w.workspaceId)}
               className={cn(
                 'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm',
-                w.workspaceId === selectedId
+                view === 'workspace' && w.workspaceId === selectedId
                   ? 'bg-secondary font-medium text-foreground'
                   : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
               )}
@@ -181,6 +200,33 @@ function WorkspaceView({
   );
 }
 
+function PersonalMemoryView({ me }: { me: Me }) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-border px-6 py-3">
+        <h1 className="text-lg font-semibold">Personal memory</h1>
+        <span className="text-xs text-muted-foreground">private · account-scoped</span>
+      </div>
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 p-6">
+        <div className="max-w-md rounded-lg border border-dashed border-border p-8 text-center">
+          <p className="text-sm font-medium">Your personal memory</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            A private, cross-project store that follows you across machines. Browsing and querying it
+            arrives with the read surface (a separate headless memorize replica). Reserved here.
+          </p>
+          <p className="mt-3 inline-block rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+            개발 예정
+          </p>
+        </div>
+        <div className="w-full max-w-xl">
+          <p className="text-xs text-muted-foreground">Personal store id</p>
+          <code className="mt-1 block font-mono text-sm">{me.personalStoreId}</code>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CenteredCard({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background">
@@ -196,6 +242,7 @@ export default function App() {
   const [newOpen, setNewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [view, setView] = useState<'workspace' | 'personal'>('workspace');
 
   const refreshWorkspaces = useCallback(async () => {
     const ws = await listWorkspaces();
@@ -247,12 +294,19 @@ export default function App() {
         me={me}
         workspaces={workspaces}
         selectedId={selectedId}
-        onSelect={setSelectedId}
+        view={view}
+        onSelect={(id) => {
+          setSelectedId(id);
+          setView('workspace');
+        }}
+        onSelectPersonal={() => setView('personal')}
         onCreate={() => setNewOpen(true)}
         onOpenAccount={() => setAccountOpen(true)}
       />
       <main className="min-w-0 flex-1">
-        {selected ? (
+        {view === 'personal' ? (
+          <PersonalMemoryView me={me} />
+        ) : selected ? (
           <WorkspaceView workspace={selected} onOpenSettings={() => setSettingsOpen(true)} />
         ) : (
           <div className="flex h-full items-center justify-center p-6">
