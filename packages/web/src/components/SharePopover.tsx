@@ -1,14 +1,7 @@
 import { Check, ChevronDown, Link2, Lock, Users } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import {
@@ -19,6 +12,93 @@ import {
   type Me,
   type WorkspaceDetail,
 } from '@/lib/api';
+
+/**
+ * An inline role menu — deliberately NOT a Radix DropdownMenu, which would portal
+ * outside the Share popover and make Radix dismiss it. This renders inside the
+ * popover DOM, so there is no nested-layer conflict.
+ */
+function RoleMenu({
+  role,
+  self,
+  busy,
+  onSetRole,
+  onRemove,
+}: {
+  role: 'owner' | 'member';
+  self: boolean;
+  busy: boolean;
+  onSetRole: (r: 'owner' | 'member') => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const item =
+    'flex w-full cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-secondary';
+  return (
+    <div className="relative" ref={ref}>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={busy}
+        className="gap-1 font-normal text-muted-foreground"
+        onClick={() => setOpen((o) => !o)}
+      >
+        {role} <ChevronDown className="size-3.5 opacity-60" />
+      </Button>
+      {open && (
+        <div className="absolute right-0 z-50 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-md">
+          <button
+            className={item}
+            onClick={() => {
+              setOpen(false);
+              if (role !== 'owner') onSetRole('owner');
+            }}
+          >
+            <Check className={cn('mt-0.5 size-4 shrink-0', role === 'owner' ? 'opacity-100' : 'opacity-0')} />
+            <span>
+              Owner
+              <span className="block text-xs text-muted-foreground">Manage members, invites, delete</span>
+            </span>
+          </button>
+          <button
+            className={item}
+            onClick={() => {
+              setOpen(false);
+              if (role !== 'member') onSetRole('member');
+            }}
+          >
+            <Check className={cn('mt-0.5 size-4 shrink-0', role === 'member' ? 'opacity-100' : 'opacity-0')} />
+            <span>
+              Member
+              <span className="block text-xs text-muted-foreground">Sync and publish memory</span>
+            </span>
+          </button>
+          <div className="my-1 h-px bg-border" />
+          <button
+            className={cn(item, 'text-destructive')}
+            onClick={() => {
+              setOpen(false);
+              onRemove();
+            }}
+          >
+            <span className="pl-6">{self ? 'Leave workspace' : 'Remove'}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Notion-style Share: a compact popover (not a centered dialog) anchored to a
@@ -134,47 +214,16 @@ export function SharePopover({
                     </span>
                   </div>
                   {isOwner ? (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="gap-1 font-normal text-muted-foreground">
-                          {m.role} <ChevronDown className="size-3.5 opacity-60" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-64">
-                        <DropdownMenuItem
-                          className="flex-col items-start gap-0"
-                          onSelect={() => {
-                            if (m.role !== 'owner') void run(() => setMemberRole(workspaceId, m.accountId, 'owner'));
-                          }}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Check className={cn('size-4', m.role === 'owner' ? 'opacity-100' : 'opacity-0')} /> Owner
-                          </span>
-                          <span className="pl-6 text-xs text-muted-foreground">Manage members, invites, delete</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="flex-col items-start gap-0"
-                          onSelect={() => {
-                            if (m.role !== 'member') void run(() => setMemberRole(workspaceId, m.accountId, 'member'));
-                          }}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Check className={cn('size-4', m.role === 'member' ? 'opacity-100' : 'opacity-0')} /> Member
-                          </span>
-                          <span className="pl-6 text-xs text-muted-foreground">Sync and publish memory</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onSelect={() => {
-                            if (!window.confirm(self ? 'Leave this workspace?' : 'Remove this member?')) return;
-                            void run(() => removeMember(workspaceId, m.accountId), self ? { removed: true } : undefined);
-                          }}
-                        >
-                          {self ? 'Leave workspace' : 'Remove'}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <RoleMenu
+                      role={m.role}
+                      self={self}
+                      busy={busy}
+                      onSetRole={(r) => void run(() => setMemberRole(workspaceId, m.accountId, r))}
+                      onRemove={() => {
+                        if (!window.confirm(self ? 'Leave this workspace?' : 'Remove this member?')) return;
+                        void run(() => removeMember(workspaceId, m.accountId), self ? { removed: true } : undefined);
+                      }}
+                    />
                   ) : showSelfLeave ? (
                     <Button
                       variant="ghost"
