@@ -22,7 +22,15 @@ import {
   readAccount,
   type AccountSession,
 } from './session.js';
-import { cmdBlock, copyScript, htmlEscape, layout, originFor } from './views.js';
+import {
+  cmdBlock,
+  copyScript,
+  docsLayout,
+  docsSidebar,
+  htmlEscape,
+  layout,
+  originFor,
+} from './views.js';
 
 /**
  * Browser (session) surfaces (docs/protocol/README.md §6): `/` landing, `/docs`,
@@ -67,8 +75,10 @@ function redirect(res: ServerResponse, location: string, setCookie?: string | st
 /* ------------------------------------------------------------------ landing --- */
 
 export function handleLanding(req: IncomingMessage, res: ServerResponse, ctx: GatewayContext): void {
+  // Signed-in visitors skip the marketing landing and go straight to the app.
+  if (readNavUser(req, ctx)) return redirect(res, '/app');
   const origin = originFor(req, ctx.config);
-  const user = readNavUser(req, ctx);
+  const user = null;
   const body = `
 <section class="py-8">
  <h1 class="text-4xl font-bold tracking-tight">Cross-machine memory<br>for local-first agents.</h1>
@@ -109,37 +119,120 @@ ${copyScript()}`;
 
 /* --------------------------------------------------------------------- docs --- */
 
+interface DocPage {
+  slug: string;
+  title: string;
+  section: string;
+  render: (origin: string) => string;
+}
+
+const H1 = 'text-2xl font-bold tracking-tight';
+const H2 = 'mt-10 text-lg font-semibold';
+const P = 'mt-2 text-sm prose-muted';
+
+const DOC_PAGES: DocPage[] = [
+  {
+    slug: '',
+    title: 'Overview',
+    section: 'Getting started',
+    render: () => `<h1 class="${H1}">memorize Hub</h1>
+<p class="mt-3 text-base prose-muted max-w-2xl">The Hub is the optional relay + control-plane for
+ <a href="https://github.com/shakystar/memorize" class="text-accent hover:underline">memorize</a>'s
+ cross-machine sync. It holds opaque per-store event logs so your machines — and teammates — converge
+ without sharing a filesystem.</p>
+<div class="mt-6 grid gap-4 sm:grid-cols-3">
+ <div class="card"><h2 class="font-semibold">Personal memory</h2><p class="mt-1 text-sm prose-muted">A private,
+  account-scoped store that follows you across machines.</p></div>
+ <div class="card"><h2 class="font-semibold">Shared workspaces</h2><p class="mt-1 text-sm prose-muted">Invite
+  teammates into one event log; memory becomes the union, tagged by provenance.</p></div>
+ <div class="card"><h2 class="font-semibold">Local-first</h2><p class="mt-1 text-sm prose-muted">The relay is
+  always optional. Append-only, store-and-forward, self-healing.</p></div>
+</div>
+<h2 class="${H2}">Two planes</h2>
+<p class="${P}">A dumb <strong class="text-fg">relay</strong> stores opaque, append-only event logs keyed only on
+ <code class="font-mono">event.id</code>. A thin <strong class="text-fg">gateway</strong> owns identity, keys,
+ membership, and invites, and reverse-proxies the relay. They never mix — that is what keeps the relay
+ vendor-neutral and your memory schema free to evolve.</p>
+<p class="mt-4 text-sm"><a href="/docs/quickstart" class="text-accent hover:underline">Start with the quickstart -&gt;</a></p>`,
+  },
+  {
+    slug: 'quickstart',
+    title: 'Quickstart',
+    section: 'Getting started',
+    render: (o) => `<h1 class="${H1}">Quickstart</h1>
+<p class="${P}">Sync a project across two machines in four steps. Needs memorize 2.5.0+.</p>
+<h2 class="${H2}">1. Update memorize</h2>
+${cmdBlock('memorize update')}
+<h2 class="${H2}">2. Get a key</h2>
+<p class="${P}">Open the <a href="/app" class="text-accent hover:underline">dashboard</a>, sign in with GitHub,
+ and generate an API key under your account.</p>
+<h2 class="${H2}">3. Log in once per machine</h2>
+<p class="${P}">Store the key host-wide so later commands carry no inline token.</p>
+${cmdBlock(`memorize auth login --remote-url ${o} --token YOUR_KEY`)}
+<h2 class="${H2}">4. Sync a project</h2>
+<p class="${P}">Use <code class="font-mono">clone</code>, not <code class="font-mono">init</code> —
+ <code class="font-mono">init</code> forks a new empty project that will not sync.</p>
+${cmdBlock(`memorize project clone PROJECT_ID --remote-url ${o}`)}`,
+  },
+  {
+    slug: 'workspaces',
+    title: 'Workspaces',
+    section: 'Concepts',
+    render: () => `<h1 class="${H1}">Workspaces</h1>
+<p class="${P}">A workspace is a shared, multi-account project surface: several accounts each sync their
+ project into one shared event log, and every member's local store becomes the union, distinguished by
+ provenance. A <strong class="text-fg">private project is the degenerate 1-member case</strong> of the same
+ mechanism.</p>
+<h2 class="${H2}">Roles</h2>
+<p class="${P}">Two roles: <strong class="text-fg">owner</strong> (manages membership, invites, roles, and can
+ delete the workspace) and <strong class="text-fg">member</strong> (sync = publish). Owners are equal peers;
+ the only guardrail is that the last owner cannot leave while other members remain.</p>
+<h2 class="${H2}">Invites</h2>
+<p class="${P}">Owners mint a revocable, optionally-expiring, multi-use invite link. The first invite flips a
+ private project into a shared workspace. Joining is per-account and authenticated — the link grants
+ membership, not raw data access.</p>`,
+  },
+  {
+    slug: 'personal-memory',
+    title: 'Personal memory',
+    section: 'Concepts',
+    render: () => `<h1 class="${H1}">Personal memory</h1>
+<p class="${P}">Your global, cross-project memory syncs to a private, account-scoped store. It is never shared,
+ never grantable, and reachable only by your own unscoped keys — the privacy boundary is structural, not a
+ setting. The client keeps personal-scoped memory out of any workspace push.</p>`,
+  },
+  {
+    slug: 'keys',
+    title: 'API keys',
+    section: 'Concepts',
+    render: () => `<h1 class="${H1}">API keys</h1>
+<p class="${P}">Keys authenticate your machines to the Hub. Two orthogonal attributes only ever narrow access:
+ <strong class="text-fg">read-only</strong> (pull, never push or mutate) and <strong class="text-fg">scope</strong>
+ (a data-plane-only key limited to specific workspaces). An unscoped key syncs personal memory and every
+ workspace you belong to; a scoped key reaches neither personal memory nor account management.</p>`,
+  },
+];
+
 export function handleDocs(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   ctx: GatewayContext,
-  _url: URL,
+  url: URL,
 ): void {
-  const user = readNavUser(_req, ctx);
-  const origin = originFor(_req, ctx.config);
-  const body = `
-<h1 class="text-2xl font-bold">Docs</h1>
-<p class="mt-2 prose-muted">Getting started with the memorize Hub. Full guides land as
- the control-plane rebuild ships; this is the quickstart.</p>
-
-<h2 class="mt-8 text-lg font-semibold">1. Update memorize</h2>
-<p class="mt-1 text-sm prose-muted">Host login + token-free clone need memorize 2.5.0+.</p>
-${cmdBlock('memorize update')}
-
-<h2 class="mt-8 text-lg font-semibold">2. Get a key</h2>
-<p class="mt-1 text-sm prose-muted">Sign in at <a href="/account" class="text-accent hover:underline">/account</a>
- with GitHub and generate an API key.</p>
-
-<h2 class="mt-8 text-lg font-semibold">3. Log in once per machine</h2>
-${cmdBlock(`memorize auth login --remote-url ${origin} --token YOUR_KEY`)}
-
-<h2 class="mt-8 text-lg font-semibold">4. Sync a project</h2>
-<p class="mt-1 text-sm prose-muted">Use <code class="font-mono">clone</code>, not
- <code class="font-mono">init</code> — <code class="font-mono">init</code> forks a new
- empty project that will not sync.</p>
-${cmdBlock(`memorize project clone PROJECT_ID --remote-url ${origin}`)}
-${copyScript()}`;
-  sendHtml(res, 200, layout({ title: 'memorize Hub — docs', body, user, wide: true }));
+  const origin = originFor(req, ctx.config);
+  const slug =
+    url.pathname === '/docs' || url.pathname === '/docs/'
+      ? ''
+      : decodeURIComponent(url.pathname.replace(/^\/docs\/?/, ''));
+  const links = DOC_PAGES.map((p) => ({ slug: p.slug, title: p.title, section: p.section }));
+  const page = DOC_PAGES.find((p) => p.slug === slug);
+  if (!page) {
+    const content = `<h1 class="${H1}">Not found</h1><p class="${P}">No such docs page. <a href="/docs" class="text-accent hover:underline">Back to docs</a>.</p>`;
+    sendHtml(res, 404, docsLayout({ title: 'memorize Hub — docs', sidebar: docsSidebar(links, ''), content }));
+    return;
+  }
+  const content = `${page.render(origin)}${copyScript()}`;
+  sendHtml(res, 200, docsLayout({ title: `memorize Hub — ${page.title}`, sidebar: docsSidebar(links, slug), content }));
 }
 
 /* ---------------------------------------------------------- oauth callback --- */
