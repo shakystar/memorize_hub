@@ -6,7 +6,6 @@
 
 export interface Me {
   accountId: string;
-  login: string;
   email: string;
   personalStoreId: string;
 }
@@ -61,7 +60,7 @@ export async function createWorkspace(name: string): Promise<{ workspaceId: stri
 export interface Member {
   accountId: string;
   role: 'owner' | 'member';
-  githubLogin: string | null;
+  email: string;
   joinedAt: string;
 }
 

@@ -119,7 +119,7 @@ Response `200`:
     {
       "accountId": "acc_...",
       "role": "owner",
-      "githubLogin": "alice",       // display handle for provenance; may be null
+      "email": "alice@example.com", // verified email — display handle for provenance
       "joinedAt": "2026-07-01T00:00:00Z"
     }
   ]
@@ -212,7 +212,7 @@ returns the discovery shape:
 The human-facing wrapper of the join capability (from a shared `joinUrl`). Serves
 an HTML page:
 
-- If the visitor has no session -> GitHub OAuth login, then return here.
+- If the visitor has no session -> Google OAuth login, then return here.
 - With a session -> redeem the token exactly as `POST /v1/workspaces/join` does
   (`via: "session"`), then show a success page naming the workspace and how to
   bind a local folder to it.

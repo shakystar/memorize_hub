@@ -4,25 +4,25 @@ import type { GatewayConfig } from './config.js';
 import { signValue, verifyValue } from './session.js';
 
 /**
- * Minimal GitHub OAuth (authorization code) for account self-service login. The
- * operator dashboard reuses this SAME account session — an allowlist check gates
- * `/admin`, with no separate operator login or cookie. One callback path,
- * `/oauth/callback`, so a single GitHub OAuth App registers exactly that URL — no
- * reliance on GitHub's sub-directory redirect_uri matching. The (single) flow is
- * carried in the signed `state` and dispatched at the shared callback (see web.ts).
+ * Minimal Google OAuth (OpenID Connect authorization code) for account
+ * self-service login. The operator dashboard reuses this SAME account session — an
+ * allowlist check gates `/admin`, with no separate operator login or cookie. One
+ * callback path, `/oauth/callback`, registered as the sole redirect URI on the
+ * Google OAuth client. The (single) flow is carried in the signed `state` and
+ * dispatched at the shared callback (see web.ts).
  */
 
-const AUTHORIZE = 'https://github.com/login/oauth/authorize';
-const TOKEN = 'https://github.com/login/oauth/access_token';
-const USER = 'https://api.github.com/user';
-const EMAILS = 'https://api.github.com/user/emails';
+const AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
+const TOKEN = 'https://oauth2.googleapis.com/token';
+const USERINFO = 'https://openidconnect.googleapis.com/v1/userinfo';
 const STATE_COOKIE = 'hub_oauth_state';
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 /** The one callback path both flows return to (register this exact URL on the app). */
 export const CALLBACK_PATH = '/oauth/callback';
 const COOKIE_PATH = '/oauth';
-const DEFAULT_SCOPE = 'read:user';
+/** OIDC scopes: `openid email` for the verified email + stable `sub`, `profile` for display. */
+const DEFAULT_SCOPE = 'openid email profile';
 
 export type OAuthFlow = 'account';
 
@@ -33,7 +33,7 @@ export function callbackUrl(config: GatewayConfig): string {
 export interface LoginOptions {
   /** Which surface initiated login; dispatched at the shared callback. */
   flow: OAuthFlow;
-  /** OAuth scope; the account flow adds `user:email` to read a verified email. */
+  /** OIDC scope; defaults to `openid email profile` (verified email + stable sub). */
   scope?: string;
 }
 
@@ -49,8 +49,9 @@ export function beginLogin(
     config.sessionSecret!,
   );
   const url = new URL(AUTHORIZE);
-  url.searchParams.set('client_id', config.githubClientId!);
+  url.searchParams.set('client_id', config.googleClientId!);
   url.searchParams.set('redirect_uri', callbackUrl(config));
+  url.searchParams.set('response_type', 'code');
   url.searchParams.set('scope', scope);
   url.searchParams.set('state', state);
   return {
@@ -83,73 +84,46 @@ export const clearStateCookie = `${STATE_COOKIE}=; Path=${COOKIE_PATH}; HttpOnly
 export const STATE_COOKIE_NAME = STATE_COOKIE;
 
 export interface ResolvedLogin {
-  login: string;
-  /** Primary verified email — only populated when `fetchEmail` is requested. */
-  email: string | null;
-}
-
-interface ResolveOptions {
-  /** Fetch the user's primary verified email (requires the `user:email` scope). */
-  fetchEmail?: boolean;
+  /** Google's stable, immutable account id (OIDC `sub`) — the get-or-create key. */
+  sub: string;
+  /** Verified, lowercased primary email — the cross-channel anchor + display handle. */
+  email: string;
 }
 
 /**
- * Exchange an authorization code for the authenticated GitHub login (and, for the
- * account flow, a verified email). Returns null on any failure.
+ * Exchange an authorization code for the Google identity: a stable `sub` and a
+ * verified email. The token comes directly from Google over TLS and userinfo is
+ * fetched from Google over TLS, so no local id_token signature check is needed.
+ * Returns null on any failure or an unverified email.
  */
 export async function resolveLogin(
   config: GatewayConfig,
   code: string,
-  opts: ResolveOptions = {},
 ): Promise<ResolvedLogin | null> {
   const tokenRes = await fetch(TOKEN, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify({
-      client_id: config.githubClientId,
-      client_secret: config.githubClientSecret,
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+    body: new URLSearchParams({
+      client_id: config.googleClientId!,
+      client_secret: config.googleClientSecret!,
       code,
       redirect_uri: callbackUrl(config),
-    }),
+      grant_type: 'authorization_code',
+    }).toString(),
   });
   if (!tokenRes.ok) return null;
   const token = (await tokenRes.json()) as { access_token?: string };
   if (!token.access_token) return null;
-  const authHeaders = {
-    authorization: `Bearer ${token.access_token}`,
-    accept: 'application/vnd.github+json',
-    'user-agent': 'memorize-hub-gateway',
-  };
 
-  const userRes = await fetch(USER, { headers: authHeaders });
+  const userRes = await fetch(USERINFO, {
+    headers: { authorization: `Bearer ${token.access_token}`, accept: 'application/json' },
+  });
   if (!userRes.ok) return null;
-  const user = (await userRes.json()) as { login?: string };
-  if (!user.login) return null;
-
-  let email: string | null = null;
-  if (opts.fetchEmail) {
-    email = await primaryVerifiedEmail(authHeaders, user.login);
-  }
-  return { login: user.login, email };
-}
-
-/** Pick the primary verified email; fall back to GitHub's noreply form. */
-async function primaryVerifiedEmail(
-  authHeaders: Record<string, string>,
-  login: string,
-): Promise<string> {
-  const fallback = `${login}@users.noreply.github.com`;
-  try {
-    const res = await fetch(EMAILS, { headers: authHeaders });
-    if (!res.ok) return fallback;
-    const emails = (await res.json()) as Array<{
-      email?: string;
-      primary?: boolean;
-      verified?: boolean;
-    }>;
-    const primary = emails.find((e) => e.primary && e.verified && e.email);
-    return primary?.email ?? fallback;
-  } catch {
-    return fallback;
-  }
+  const user = (await userRes.json()) as {
+    sub?: string;
+    email?: string;
+    email_verified?: boolean;
+  };
+  if (!user.sub || !user.email || user.email_verified !== true) return null;
+  return { sub: user.sub, email: user.email.toLowerCase() };
 }

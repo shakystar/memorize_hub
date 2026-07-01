@@ -9,32 +9,32 @@ function nowIso(): string {
 }
 
 /**
- * Get-or-create an account from a GitHub identity; returns the account id.
- * Resolves by github_login first, then by email (attaching the login to a
- * pre-existing email-keyed row), else inserts. email is the cross-channel anchor;
- * github_login is the stable OAuth handle.
+ * Get-or-create an account from a Google identity; returns the account id.
+ * Resolves by provider_sub (the immutable OIDC `sub`) first, then by email
+ * (attaching the sub to a pre-existing email-keyed row), else inserts. email is
+ * the cross-channel anchor + display handle; provider_sub is the stable OAuth key.
  */
-export function upsertAccountByGithub(db: Database.Database, login: string, email: string): string {
-  const byLogin = db.prepare('SELECT id FROM accounts WHERE github_login = ?').get(login) as
+export function upsertAccountByGoogle(db: Database.Database, sub: string, email: string): string {
+  const bySub = db.prepare('SELECT id FROM accounts WHERE provider_sub = ?').get(sub) as
     | { id: string }
     | undefined;
-  if (byLogin) return byLogin.id;
+  if (bySub) return bySub.id;
 
-  const byEmail = db.prepare('SELECT id, github_login FROM accounts WHERE email = ?').get(email) as
-    | { id: string; github_login: string | null }
+  const byEmail = db.prepare('SELECT id, provider_sub FROM accounts WHERE email = ?').get(email) as
+    | { id: string; provider_sub: string | null }
     | undefined;
   if (byEmail) {
-    if (!byEmail.github_login) {
-      db.prepare('UPDATE accounts SET github_login = ? WHERE id = ?').run(login, byEmail.id);
+    if (!byEmail.provider_sub) {
+      db.prepare('UPDATE accounts SET provider_sub = ? WHERE id = ?').run(sub, byEmail.id);
     }
     return byEmail.id;
   }
 
   const id = newId('acc');
-  db.prepare('INSERT INTO accounts (id, email, github_login, created_at) VALUES (?, ?, ?, ?)').run(
+  db.prepare('INSERT INTO accounts (id, email, provider_sub, created_at) VALUES (?, ?, ?, ?)').run(
     id,
     email,
-    login,
+    sub,
     nowIso(),
   );
   return id;
@@ -54,7 +54,7 @@ export function upsertAccountByEmail(db: Database.Database, email: string): stri
 export interface AccountRow {
   id: string;
   email: string;
-  github_login: string | null;
+  provider_sub: string | null;
   created_at: string;
 }
 

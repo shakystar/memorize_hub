@@ -24,10 +24,8 @@ function pageHead(title: string): string {
 }
 
 export interface NavUser {
-  /** GitHub login of the signed-in account, shown in the header. */
-  login: string;
-  /** Verified email, shown in the account dropdown (optional). */
-  email?: string;
+  /** Verified email of the signed-in account — the display handle. */
+  email: string;
 }
 
 export interface LayoutOptions {
@@ -40,23 +38,20 @@ export interface LayoutOptions {
   wide?: boolean;
 }
 
-/** The header account control: an avatar that opens a native <details> dropdown. */
+/** The header account control: a monogram avatar that opens a native <details> dropdown. */
 function accountMenu(user: NavUser | null | undefined): string {
   if (!user) {
     return `<a href="/app" class="text-fg-muted hover:text-fg hover:no-underline">Open app</a>`;
   }
-  const avatar = `https://github.com/${encodeURIComponent(user.login)}.png?size=48`;
-  const email = user.email
-    ? `<div class="truncate text-xs text-fg-muted">${htmlEscape(user.email)}</div>`
-    : '';
+  const initial = htmlEscape((user.email[0] ?? '?').toUpperCase());
   return `<details class="relative">
  <summary class="flex items-center gap-2">
-  <img src="${avatar}" alt="@${htmlEscape(user.login)}" width="28" height="28"
-   class="h-7 w-7 rounded-full border border-default bg-canvas-subtle">
+  <span title="${htmlEscape(user.email)}"
+   class="flex h-7 w-7 items-center justify-center rounded-full border border-default bg-canvas-subtle text-xs font-semibold">${initial}</span>
  </summary>
  <div class="shadow-menu absolute right-0 z-20 mt-2 w-60 rounded-lg border border-default bg-canvas p-1">
   <div class="px-3 py-2">
-   <div class="text-sm font-semibold">@${htmlEscape(user.login)}</div>${email}
+   <div class="truncate text-sm font-semibold">${htmlEscape(user.email)}</div>
   </div>
   <div class="my-1 border-t border-default"></div>
   <a href="/account" class="block rounded-md px-3 py-1.5 text-sm hover:bg-canvas-subtle hover:no-underline">Overview</a>
@@ -223,12 +218,12 @@ export interface OperatorNavItem {
  */
 export function operatorLayout({
   title,
-  login,
+  email,
   nav,
   body,
 }: {
   title: string;
-  login: string;
+  email: string;
   nav: OperatorNavItem[];
   body: string;
 }): string {
@@ -251,7 +246,7 @@ export function operatorLayout({
    Operator <span class="ml-1 font-normal text-fg-subtle">memorize Hub</span>
   </span>
   <nav class="flex items-center gap-4 text-sm text-fg-muted">
-   <span class="tabular-nums">@${htmlEscape(login)}</span>
+   <span class="tabular-nums">${htmlEscape(email)}</span>
    <a href="/account/logout" class="hover:text-fg hover:no-underline">Sign out</a>
   </nav>
  </div>

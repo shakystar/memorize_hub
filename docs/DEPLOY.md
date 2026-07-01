@@ -96,26 +96,30 @@ fly apps create <your-app-name>          # then set `app = "<your-app-name>"` in
 fly volumes create hub_data --size 1 --region nrt   # durable /data (match primary_region)
 ```
 
-### 2. GitHub OAuth app (operator dashboard + participant /account)
-Create one at https://github.com/settings/developers -> **New OAuth App**:
-- **Homepage URL:** `https://<your-app-name>.fly.dev`
-- **Authorization callback URL:** `https://<your-app-name>.fly.dev/oauth/callback`
+### 2. Google OAuth client (operator dashboard + participant /account)
+Create one in the Google Cloud console -> **APIs & Services -> Credentials ->
+Create credentials -> OAuth client ID -> Web application**:
+- **Authorized redirect URIs:**
+  - `https://<your-app-name>.fly.dev/oauth/callback`
+  - `http://localhost:8080/oauth/callback` (local dev; match `GATEWAY_PORT`)
 
-One app backs both flows: the operator dashboard (`/admin`) and participant
-self-service (`/account`) share this single callback. Register this exact URL —
-it is an exact match, not a sub-directory, so no widening is needed.
+One client backs both flows: the operator dashboard (`/admin`) and participant
+self-service (`/account`) share this single callback. Register these exact URLs —
+they are exact matches, not sub-directories.
 
-Copy the Client ID and generate a Client secret.
+Publish the OAuth consent screen to **Production** so any Google account may sign
+in (scopes are `openid email profile` — non-sensitive, so no Google review is
+needed). Copy the Client ID and secret.
 
 ### 3. Secrets + operator config
 ```bash
 fly secrets set \
   RELAY_INTERNAL_TOKEN="$(openssl rand -base64 32)" \
   GATEWAY_SESSION_SECRET="$(openssl rand -base64 32)" \
-  GITHUB_CLIENT_ID="<client id>" \
-  GITHUB_CLIENT_SECRET="<client secret>" \
+  GOOGLE_CLIENT_ID="<client id>" \
+  GOOGLE_CLIENT_SECRET="<client secret>" \
   GATEWAY_PUBLIC_URL="https://<your-app-name>.fly.dev" \
-  GATEWAY_ADMIN_LOGINS="<your-github-login>"
+  GATEWAY_ADMIN_EMAILS="<your-google-email>"
 ```
 `start-hub.mjs` mirrors `RELAY_INTERNAL_TOKEN` into `MEMORIZE_RELAY_TOKEN`, so the
 relay gates on the same value the gateway presents - one secret, both sides.
@@ -125,7 +129,7 @@ relay gates on the same value the gateway presents - one secret, both sides.
 fly deploy
 curl https://<your-app-name>.fly.dev/healthz          # {"ok":true}
 open  https://<your-app-name>.fly.dev/beta            # public request page
-open  https://<your-app-name>.fly.dev/admin          # GitHub sign-in -> dashboard
+open  https://<your-app-name>.fly.dev/admin          # Google sign-in -> dashboard
 ```
 
 ### 5. Onboard a beta participant

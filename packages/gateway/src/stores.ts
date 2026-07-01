@@ -36,7 +36,7 @@ export interface AccountStore {
 export interface Member {
   accountId: string;
   role: Role;
-  githubLogin: string | null;
+  email: string;
   joinedAt: string;
 }
 
@@ -106,15 +106,15 @@ export function listAccountStores(db: Database.Database, accountId: string): Acc
 export function roster(db: Database.Database, storeId: string): Member[] {
   const rows = db
     .prepare(
-      `SELECT m.account_id, m.role, m.joined_at, a.github_login
+      `SELECT m.account_id, m.role, m.joined_at, a.email
          FROM memberships m JOIN accounts a ON a.id = m.account_id
         WHERE m.store_id = ? ORDER BY m.joined_at ASC`,
     )
-    .all(storeId) as Array<{ account_id: string; role: Role; joined_at: string; github_login: string | null }>;
+    .all(storeId) as Array<{ account_id: string; role: Role; joined_at: string; email: string }>;
   return rows.map((r) => ({
     accountId: r.account_id,
     role: r.role,
-    githubLogin: r.github_login,
+    email: r.email,
     joinedAt: r.joined_at,
   }));
 }

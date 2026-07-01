@@ -18,7 +18,7 @@ primary_region = "nrt"        # Tokyo; pick the region nearest your machines
   GATEWAY_DB = "/data/gateway-v2.db"
   # Non-secret operator config (secrets go via `fly secrets set` — see DEPLOY.md):
   #   GATEWAY_PUBLIC_URL   = "https://<app>.fly.dev"
-  #   GATEWAY_ADMIN_LOGINS = "your-github-login"
+  #   GATEWAY_ADMIN_EMAILS = "you@example.com"
 
 # Public edge = the gateway only. The relay's 8787 is never published, so it is
 # not routable from outside this machine; it is additionally token-gated.

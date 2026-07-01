@@ -121,7 +121,7 @@ export function getWorkspace(
   const members = roster(ctx.db, storeId).map((m) => ({
     accountId: m.accountId,
     role: m.role,
-    githubLogin: m.githubLogin,
+    email: m.email,
     joinedAt: m.joinedAt,
   }));
   sendJson(res, 200, {

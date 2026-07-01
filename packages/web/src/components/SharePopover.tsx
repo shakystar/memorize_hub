@@ -206,10 +206,10 @@ export function SharePopover({
                 <div key={m.accountId} className="flex items-center justify-between py-1.5 text-sm">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="flex size-6 items-center justify-center rounded-full border border-border bg-secondary text-xs">
-                      {(m.githubLogin ?? '?').slice(0, 1).toUpperCase()}
+                      {(m.email[0] ?? '?').toUpperCase()}
                     </span>
                     <span className="truncate">
-                      {m.githubLogin ? `@${m.githubLogin}` : m.accountId}
+                      {m.email}
                       {self && <span className="text-muted-foreground"> (you)</span>}
                     </span>
                   </div>

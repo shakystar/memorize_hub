@@ -21,7 +21,6 @@ let base = '';
 
 const alice = upsertAccountByEmail(db, 'alice@ws.example');
 const bob = upsertAccountByEmail(db, 'bob@ws.example');
-db.prepare('UPDATE accounts SET github_login=? WHERE id=?').run('alice', alice);
 const aliceKey = issueApiKey(db, alice, 'alice').plaintext;
 const aliceReadOnly = issueApiKey(db, alice, 'alice-ro', { readOnly: true }).plaintext;
 const bobKey = issueApiKey(db, bob, 'bob').plaintext;
@@ -99,10 +98,10 @@ describe('workspace create + discovery', () => {
   it('serves the roster to a member', async () => {
     const res = await fetch(`${base}/v1/workspaces/${wsId}`, { headers: auth(aliceKey) });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { members: Array<{ accountId: string; role: string; githubLogin: string | null }> };
+    const body = (await res.json()) as { members: Array<{ accountId: string; role: string; email: string }> };
     expect(body.members).toHaveLength(1);
     expect(body.members[0]?.role).toBe('owner');
-    expect(body.members[0]?.githubLogin).toBe('alice');
+    expect(body.members[0]?.email).toBe('alice@ws.example');
   });
 
   it('404s the roster for a non-member (existence-leak policy)', async () => {

@@ -51,14 +51,13 @@ export function parseCookies(header: string | undefined): Record<string, string>
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 /**
- * Account session — a user signed in via GitHub OAuth. Scoped to Path=/ (the web
+ * Account session — a user signed in via Google OAuth. Scoped to Path=/ (the web
  * surface spans /account, /join, and future pages). Carries the resolved
- * accountId (H040 `acc_…`) plus the login + verified email for display and for
- * attaching self-minted keys to the right account row.
+ * accountId (H040 `acc_…`) plus the verified email, which is both the display
+ * handle and the operator-allowlist key.
  */
 export interface AccountSession {
   accountId: string;
-  login: string;
   email: string;
   exp: number;
 }
@@ -66,12 +65,11 @@ export interface AccountSession {
 const ACCOUNT_COOKIE = 'hub_acct';
 
 export function accountCookie(
-  identity: { accountId: string; login: string; email: string },
+  identity: { accountId: string; email: string },
   secret: string,
 ): string {
   const session: AccountSession = {
     accountId: identity.accountId,
-    login: identity.login,
     email: identity.email,
     exp: Date.now() + SESSION_TTL_MS,
   };

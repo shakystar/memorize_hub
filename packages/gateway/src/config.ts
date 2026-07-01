@@ -11,30 +11,30 @@ export interface GatewayConfig {
   relayToken: string | undefined;
   /** Public base URL — used for join/invite URLs and the OAuth callback. */
   publicUrl: string | undefined;
-  /** GitHub OAuth app client id (browser session login: /account, /join, /admin). */
-  githubClientId: string | undefined;
-  /** GitHub OAuth app client secret. */
-  githubClientSecret: string | undefined;
-  /** GitHub logins allowed to operate the /admin dashboard. */
-  adminLogins: string[];
+  /** Google OAuth client id (browser session login: /account, /join, /admin). */
+  googleClientId: string | undefined;
+  /** Google OAuth client secret. */
+  googleClientSecret: string | undefined;
+  /** Verified emails allowed to operate the /admin dashboard (lowercased). */
+  adminEmails: string[];
   /** HMAC secret for signing session + OAuth state cookies. */
   sessionSecret: string | undefined;
 }
 
 /** The operator dashboard is enabled only when OAuth is fully configured. */
 export function adminEnabled(config: GatewayConfig): boolean {
-  return sessionLoginEnabled(config) && config.adminLogins.length > 0;
+  return sessionLoginEnabled(config) && config.adminEmails.length > 0;
 }
 
 /**
  * Browser session login (/account, /join) needs OAuth + session config. With no
- * beta gate (Hub SoT H080), any GitHub account may sign in — the allowlist only
+ * beta gate (Hub SoT H080), any Google account may sign in — the allowlist only
  * gates the operator /admin surface, not participation.
  */
 export function sessionLoginEnabled(config: GatewayConfig): boolean {
   return Boolean(
-    config.githubClientId &&
-      config.githubClientSecret &&
+    config.googleClientId &&
+      config.googleClientSecret &&
       config.publicUrl &&
       config.sessionSecret,
   );
@@ -56,11 +56,11 @@ export function loadGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
     relayUrl: (env.RELAY_URL || 'http://127.0.0.1:8787').replace(/\/+$/, ''),
     relayToken: env.RELAY_INTERNAL_TOKEN || undefined,
     publicUrl: env.GATEWAY_PUBLIC_URL ? env.GATEWAY_PUBLIC_URL.replace(/\/+$/, '') : undefined,
-    githubClientId: env.GITHUB_CLIENT_ID || undefined,
-    githubClientSecret: env.GITHUB_CLIENT_SECRET || undefined,
-    adminLogins: (env.GATEWAY_ADMIN_LOGINS || '')
+    googleClientId: env.GOOGLE_CLIENT_ID || undefined,
+    googleClientSecret: env.GOOGLE_CLIENT_SECRET || undefined,
+    adminEmails: (env.GATEWAY_ADMIN_EMAILS || '')
       .split(',')
-      .map((s) => s.trim())
+      .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
     sessionSecret: env.GATEWAY_SESSION_SECRET || undefined,
   };
