@@ -34,7 +34,8 @@ Decision을 바꾸려면 대체 문서를 추가하고 옛 문서는 `대체됨:
 | H020 | workspace transport = hybrid (typed control-plane + opaque log) | Decision |
 | H030 | 인가와 정책 계층 | Decision |
 | H040 | 제어평면 데이터 모델 (workspace-중심 통일) | Decision |
-| H050 | 식별자 네임스페이스와 발급 | Decision |
+| H050 | 식별자 네임스페이스와 발급 | Decision (H051이 부분 대체) |
+| H051 | proj_의 맥락별 역할 — 로컬 정체성 ↔ provenance | Decision |
 | H060 | consolidation과 read/write surface 위치 (UI에서 기억 추가 포함) | Decision |
 | H070 | at-rest 암호화 (디스크 위임, E2E 아님) | Decision |
 | H080 | onboarding 개방(베타 게이트 제거) + entitlements seam(결제 연기) | Decision |

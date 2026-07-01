@@ -58,6 +58,16 @@ keep these two axes separate.
   confirmed / tagged).
 - **Shared retrieval** — how members pull the workspace projection into a
   separate channel (not merged into local project memory).
+  **Clarification (2026-07-01, corrects an earlier ambiguity): "separate
+  channel" / "not merged" is a provenance-distinguished *logical view*, NOT a
+  separate physical store.** Per memorize SoT-040/060 the workspace union is
+  replicated into the *same* physical `memorize.db` as local memory — each
+  member's db holds a duplicate of the full union, and shared assertions stay
+  distinguishable by `writer`/`sourceProjectId` and are never folded into local
+  project memory as a single canonical value. "Separate" here means *not
+  fused*, not *different file*. This brief is Hub-side context; the memorize
+  client stores workspace union in the same db (SoT-040), routing by
+  server-minted `wsp_` while `proj_` stays the local identity + provenance.
 - **Shared tasks (later, M7)** — workspace-level task entities + local task links,
   no local task-state merge.
 
