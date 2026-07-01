@@ -21,7 +21,15 @@ import {
   readAccount,
   type AccountSession,
 } from './session.js';
-import { gatherOverview, type Overview } from './overview.js';
+import {
+  gatherBilling,
+  gatherOverview,
+  listAccounts,
+  type AccountBilling,
+  type AccountSummary,
+  type Billing,
+  type Overview,
+} from './overview.js';
 import {
   cmdBlock,
   copyScript,
@@ -352,7 +360,7 @@ export async function handleAdmin(
   req: IncomingMessage,
   res: ServerResponse,
   ctx: GatewayContext,
-  _url: URL,
+  url: URL,
 ): Promise<void> {
   const { config, db } = ctx;
   if (!adminEnabled(config)) {
@@ -371,8 +379,20 @@ export async function handleAdmin(
     sendHtml(res, 404, page('Not found', '<p class="prose-muted">Not found.</p>'));
     return;
   }
-  const overview = await gatherOverview(db, config);
-  sendHtml(res, 200, renderOverview(session, overview));
+  // Operator sections share the gate above; dispatch on the sub-path.
+  switch (url.pathname) {
+    case '/admin':
+      sendHtml(res, 200, renderOverview(session, await gatherOverview(db, config)));
+      return;
+    case '/admin/accounts':
+      sendHtml(res, 200, renderAccounts(session, listAccounts(db)));
+      return;
+    case '/admin/billing':
+      sendHtml(res, 200, renderBilling(session, await gatherBilling(db, config)));
+      return;
+    default:
+      sendHtml(res, 404, page('Not found', '<p class="prose-muted">Not found.</p>'));
+  }
 }
 
 /** Human-readable byte size (one decimal above KB). */
@@ -465,11 +485,125 @@ function renderOverview(session: AccountSession, o: Overview): string {
   return operatorLayout({
     title: 'Memorize Hub — Operator',
     email: session.email,
-    nav: [
-      { label: 'Overview', href: '/admin', active: true },
-      { label: 'Accounts', href: null },
-      { label: 'Billing', href: null },
-    ],
+    nav: operatorNav('overview'),
+    body,
+  });
+}
+
+/** The operator section rail — every section is built now, so no `soon` items. */
+function operatorNav(active: 'overview' | 'accounts' | 'billing') {
+  return [
+    { label: 'Overview', href: '/admin', active: active === 'overview' },
+    { label: 'Accounts', href: '/admin/accounts', active: active === 'accounts' },
+    { label: 'Billing', href: '/admin/billing', active: active === 'billing' },
+  ];
+}
+
+/** A bare cell class for the operator tables — right-aligned numerics. */
+const TD = 'py-1.5 border-t border-default';
+const TDNUM = `${TD} text-right tabular-nums`;
+const THEAD = 'text-left text-fg-subtle';
+
+/** Operator Accounts list — identity + membership/key counts, read-only. */
+function renderAccounts(session: AccountSession, accounts: AccountSummary[]): string {
+  const num = (n: number): string => n.toLocaleString('en-US');
+  const rows =
+    accounts.length === 0
+      ? `<tr><td class="${TD} text-fg-muted" colspan="6">No accounts yet.</td></tr>`
+      : accounts
+          .map(
+            (a) => `<tr>
+       <td class="${TD}">${htmlEscape(a.email)}</td>
+       <td class="${TD} text-fg-muted">${htmlEscape(a.createdAt.slice(0, 10))}</td>
+       <td class="${TDNUM}">${num(a.owned)}</td>
+       <td class="${TDNUM}">${num(a.joined)}</td>
+       <td class="${TDNUM}">${num(a.keysActive)}</td>
+       <td class="${TD} text-center">${a.personal ? '✓' : '—'}</td>
+      </tr>`,
+          )
+          .join('');
+
+  const body = `
+<div class="flex items-baseline justify-between">
+ <h1 class="text-2xl font-bold tracking-tight">Accounts</h1>
+ <span class="text-xs text-fg-subtle">${num(accounts.length)} total · read-only</span>
+</div>
+<p class="mt-1 text-sm prose-muted">Identity and membership counts only — never key values or memory contents.</p>
+<div class="card mt-6 overflow-x-auto"><table class="w-full text-sm">
+ <thead><tr class="${THEAD}">
+  <th class="pb-2 font-medium">Account</th>
+  <th class="pb-2 font-medium">Joined</th>
+  <th class="pb-2 text-right font-medium">Owned</th>
+  <th class="pb-2 text-right font-medium">Member</th>
+  <th class="pb-2 text-right font-medium">Keys</th>
+  <th class="pb-2 text-center font-medium">Personal</th>
+ </tr></thead>
+ <tbody>${rows}</tbody>
+</table></div>`;
+
+  return operatorLayout({
+    title: 'memorize Hub — Operator · Accounts',
+    email: session.email,
+    nav: operatorNav('accounts'),
+    body,
+  });
+}
+
+/**
+ * Operator Billing seam (H080). Per-account entitlement quantities (workspace
+ * count, invite headcount) + cost attribution. No plan enforcement yet — every
+ * account is unlimited; this is the surface future free/plus/pro caps attach to.
+ */
+function renderBilling(session: AccountSession, b: Billing): string {
+  const num = (n: number): string => n.toLocaleString('en-US');
+  const storedCell = (r: AccountBilling): string =>
+    b.relayReachable ? htmlEscape(formatBytes(r.storedBytes)) : '<span class="text-fg-subtle">—</span>';
+  const rows =
+    b.rows.length === 0
+      ? `<tr><td class="${TD} text-fg-muted" colspan="7">No accounts yet.</td></tr>`
+      : b.rows
+          .map(
+            (r) => `<tr>
+       <td class="${TD}">${htmlEscape(r.email)}</td>
+       <td class="${TD}"><span class="rounded bg-canvas-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-fg-subtle">unlimited</span></td>
+       <td class="${TDNUM}">${num(r.workspaces)}</td>
+       <td class="${TDNUM}">${num(r.members)}</td>
+       <td class="${TDNUM}">${storedCell(r)}</td>
+       <td class="${TDNUM}">${htmlEscape(formatBytes(r.egressBytes))}</td>
+       <td class="${TDNUM}">${num(r.requests)}</td>
+      </tr>`,
+          )
+          .join('');
+
+  const body = `
+<div class="flex items-baseline justify-between">
+ <h1 class="text-2xl font-bold tracking-tight">Billing</h1>
+ <span class="text-xs text-fg-subtle">last ${b.days} days · read-only</span>
+</div>
+<div class="card mt-4 border-attention-border bg-attention-subtle">
+ <p class="text-sm text-fg">Plan enforcement is not wired — every account is <strong>unlimited</strong>.
+  This is the seam: future <strong>free / plus / pro</strong> tiers would cap workspace count and invite
+  headcount, and attach here.</p>
+</div>
+<div class="card mt-4 overflow-x-auto"><table class="w-full text-sm">
+ <thead><tr class="${THEAD}">
+  <th class="pb-2 font-medium">Account</th>
+  <th class="pb-2 font-medium">Plan</th>
+  <th class="pb-2 text-right font-medium">Workspaces</th>
+  <th class="pb-2 text-right font-medium">Members</th>
+  <th class="pb-2 text-right font-medium">Stored</th>
+  <th class="pb-2 text-right font-medium">Egress</th>
+  <th class="pb-2 text-right font-medium">Requests</th>
+ </tr></thead>
+ <tbody>${rows}</tbody>
+</table></div>
+<p class="mt-3 text-xs text-fg-subtle">Workspaces + Members = the future caps. Cost is attributed to each
+ store's creator (+ the account's personal store).${b.relayReachable ? '' : ' Stored sizes hidden — relay unreachable.'}</p>`;
+
+  return operatorLayout({
+    title: 'memorize Hub — Operator · Billing',
+    email: session.email,
+    nav: operatorNav('billing'),
     body,
   });
 }
