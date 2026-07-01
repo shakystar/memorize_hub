@@ -87,8 +87,7 @@ export function layout({ title, body, user, wide = false }: LayoutOptions): stri
  <div class="${container} mx-auto px-5 py-8 text-sm text-fg-muted">
   <p>memorize Hub — the optional relay + control-plane for
    <a href="${GITHUB_URL}" class="text-accent hover:underline">memorize</a>'s cross-machine sync.
-   AGPL-3.0. Shared-workspace memory is stored as plaintext on the operator's
-   machine (operator-trusted; not end-to-end encrypted).</p>
+   AGPL-3.0.</p>
  </div>
 </footer>
 </body></html>`;
