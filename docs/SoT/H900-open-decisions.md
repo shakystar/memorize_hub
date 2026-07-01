@@ -25,7 +25,11 @@
   끝내고 마지막에 짓는 **확정 항목**이다. 트리거(첫 claude.ai 소비자 / 로컬에 안 담기는
   코퍼스 / 브라우저 UI 수요)는 이제 게이트가 아니라 빌드를 앞당길 신호. 형태: relay를
   소비하는 별도 memorize replica(read이자 write), 무게는 스펙트럼이나 컴포넌트 정체성은
-  불변([[H060]]).
+  불변([[H060]]). **착수 전 선결(기능 안정화 후 확정) = 임베드 엔진 호환성 계약**: replica는
+  클라와 동일 버전 채널(퍼블리시된 `@shakystar/memorize` 의존성; fork/벤더링 금지)을 타고,
+  union의 미지 스키마 이벤트엔 project를 거부(fail-safe)한다. 버전 비교·거부 임계·마이그레이션
+  규칙은 event 스키마 churn이 잦아 안정화 후 못박는다. 빌드 스코프·접근은
+  `docs/design/h060-read-surface-build.md`.
 - **E2E 암호화** - 연기, 수요-gated(memorize SoT-070/900 상속, [[H070]]). 의도된 형태:
   store별 DEK를 등록 기기 public key로 envelope 래핑, 서버엔 래핑된 DEK + public key만.
   **착수 전 선결 = 복구 정책**(단일 기기 분실 시 영구 소실): 오프라인 복구키 / 서버 매개
