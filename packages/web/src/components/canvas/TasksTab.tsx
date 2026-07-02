@@ -203,20 +203,19 @@ function TaskCard({
         )}
       >
         <span className="flex items-start justify-between gap-2">
-          <span className={cn('min-w-0 text-sm', closed && 'line-through')}>{task.title}</span>
+          <span className={cn('line-clamp-3 min-w-0 break-words text-sm', closed && 'line-through')}>
+            {task.title}
+          </span>
           <PriorityBadge priority={task.priority} />
         </span>
         {task.handoff && (
           <span className="mt-2 flex items-start gap-1.5 rounded-md bg-secondary px-2 py-1.5 text-xs">
             <ArrowRight className="mt-px size-3.5 shrink-0 text-primary" />
-            <span className="min-w-0">{task.handoff.nextAction}</span>
+            <span className="line-clamp-3 min-w-0 break-words">{task.handoff.nextAction}</span>
           </span>
         )}
         <span className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span className="min-w-0 truncate">
-            {shortName(task.member)} · {task.ownerType === 'human' ? 'human' : task.writer} ·{' '}
-            {task.sourceProjectLabel ?? task.sourceProjectId}
-          </span>
+          <span className="min-w-0 truncate">{cardMeta(task)}</span>
           <ShortDate at={task.at} className="ml-auto shrink-0" />
         </span>
       </button>
@@ -305,15 +304,21 @@ function DetailPanel({ task, onClose }: { task: TaskEntry; onClose: () => void }
         <Property label="Owner">
           {shortName(task.member)} · {task.ownerType}
         </Property>
-        <Property label="Agent">{task.writer}</Property>
-        <Property label="Source">{task.sourceProjectLabel ?? task.sourceProjectId}</Property>
+        {task.writer && <Property label="Agent">{task.writer}</Property>}
+        {(task.sourceProjectLabel ?? task.sourceProjectId) && (
+          <Property label="Source">{task.sourceProjectLabel ?? task.sourceProjectId}</Property>
+        )}
         <Property label="Updated">
           <ShortDate at={task.at} />
         </Property>
       </dl>
 
-      {task.goal && <Section title="Goal">{task.goal}</Section>}
-      {task.description && <Section title="Description">{task.description}</Section>}
+      {/* createTask defaults goal/description to the title — a copy is an
+          unfilled field wearing a value, so only a distinct text renders. */}
+      {task.goal && task.goal !== task.title && <Section title="Goal">{task.goal}</Section>}
+      {task.description && task.description !== task.title && task.description !== task.goal && (
+        <Section title="Description">{task.description}</Section>
+      )}
       {task.acceptanceCriteria && task.acceptanceCriteria.length > 0 && (
         <Section title="Acceptance criteria">
           <ItemList icon={<Square className="size-3.5" />} items={task.acceptanceCriteria} />
@@ -439,7 +444,14 @@ function ShortDate({ at, className }: { at: string; className?: string }) {
 }
 
 function sourceLabel(t: TaskEntry): string {
-  return t.sourceProjectLabel ?? t.sourceProjectId;
+  return t.sourceProjectLabel ?? t.sourceProjectId ?? 'Unknown source';
+}
+
+/** "member · writer · source" with the optional halves dropped when absent. */
+function cardMeta(t: TaskEntry): string {
+  return [shortName(t.member), t.ownerType === 'human' ? 'human' : t.writer, t.sourceProjectLabel ?? t.sourceProjectId]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function shortName(email: string): string {

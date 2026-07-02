@@ -139,26 +139,44 @@ function Bubble({ item, mine }: { item: DomainTimelineItem; mine: boolean }) {
             {badge}
           </span>
         )}
-        <span className={cn('text-sm', muted && 'line-through opacity-70')}>{body}</span>
-        <p className={cn('mt-1 text-[11px]', mine ? 'text-primary-foreground/60' : 'text-muted-foreground')}>
-          {item.writer} · {item.sourceProjectLabel ?? item.sourceProjectId}
-        </p>
+        <span className={cn('break-words text-sm', muted && 'line-through opacity-70')}>{body}</span>
+        {provenanceLine(item) && (
+          <p className={cn('mt-1 text-[11px]', mine ? 'text-primary-foreground/60' : 'text-muted-foreground')}>
+            {provenanceLine(item)}
+          </p>
+        )}
       </div>
       <Time at={item.at} />
     </div>
   );
 }
 
-/** Session start/end reads like a chat system message, not a bubble. */
+/**
+ * Session lifecycle reads like a chat system message, not a bubble. Real
+ * stores end sessions as paused far more often than completed, so all four
+ * verbs render.
+ */
+const SESSION_VERB = {
+  'session.started': 'started a session',
+  'session.resumed': 'resumed a session',
+  'session.paused': 'paused a session',
+  'session.completed': 'finished a session',
+} as const;
+
 function SystemLine({ item }: { item: DomainTimelineItem }) {
-  if (item.type !== 'session.started' && item.type !== 'session.completed') return null;
-  const verb = item.type === 'session.started' ? 'started a session' : 'finished a session';
+  if (!isSession(item)) return null;
+  const source = item.sourceProjectLabel ?? item.sourceProjectId;
   return (
     <p className="text-center text-xs text-muted-foreground">
-      {item.agent} {verb} · {item.sourceProjectLabel ?? item.sourceProjectId} ·{' '}
-      {formatTime(item.at)}
+      {item.agent} {SESSION_VERB[item.type]}
+      {source ? ` · ${source}` : ''} · {formatTime(item.at)}
     </p>
   );
+}
+
+/** "writer · source" with either half optional — pre-Phase-0 events carry neither. */
+function provenanceLine(item: { writer?: string; sourceProjectId?: string; sourceProjectLabel?: string }): string {
+  return [item.writer, item.sourceProjectLabel ?? item.sourceProjectId].filter(Boolean).join(' · ');
 }
 
 const KIND_LABEL = { decision: 'Decision', rationale: 'Why', progress: 'Progress' } as const;
@@ -178,6 +196,8 @@ function describe(item: DomainTimelineItem): { badge?: string; body: string; mut
     case 'handoff.created':
       return { badge: 'Handoff', body: item.title };
     case 'session.started':
+    case 'session.resumed':
+    case 'session.paused':
     case 'session.completed':
       return { body: '' }; // rendered as a SystemLine, never a bubble
   }
@@ -199,15 +219,17 @@ type AuthorGroup =
   | { kind: 'messages'; member: string; items: DomainTimelineItem[] }
   | { kind: 'system'; items: [DomainTimelineItem] };
 
-function isSystem(item: DomainTimelineItem): boolean {
-  return item.type === 'session.started' || item.type === 'session.completed';
+function isSession(
+  item: DomainTimelineItem,
+): item is DomainTimelineItem & { type: keyof typeof SESSION_VERB } {
+  return item.type in SESSION_VERB;
 }
 
 /** Split a day into chat runs: consecutive same-member bubbles, system lines standalone. */
 function groupByAuthor(items: TimelineItem[]): AuthorGroup[] {
   const groups: AuthorGroup[] = [];
   for (const item of items) {
-    if (isSystem(item)) {
+    if (isSession(item)) {
       groups.push({ kind: 'system', items: [item] });
       continue;
     }

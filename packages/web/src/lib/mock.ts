@@ -90,7 +90,8 @@ export const MOCK_TIMELINE: TimelineItem[] = [
     id: 'evt_08', at: at(1, 15, 20), type: 'handoff.created',
     title: 'Landing hero implementation -> whoever picks up the site session', ...kant,
   },
-  { id: 'evt_09', at: at(1, 14, 55), type: 'session.completed', agent: 'claude-code', ...kant },
+  { id: 'evt_09', at: at(1, 14, 55), type: 'session.paused', agent: 'claude-code', ...kant },
+  { id: 'evt_15', at: at(1, 16, 40), type: 'session.resumed', agent: 'claude-code', ...kant },
   {
     id: 'evt_10', at: at(1, 13, 10), type: 'memory.retracted',
     text: 'Old note that the beta waitlist gates signups — the gate was removed.', ...myWeb,
@@ -150,8 +151,12 @@ export const MOCK_TASKS: TaskEntry[] = [
     title: 'Draft launch announcement email', ownerType: 'human', ...mina,
   },
   {
+    // Real task titles run long (agents write whole sentences) — this one
+    // exists to exercise the card line-clamp.
     id: 'task_05', at: at(1, 9, 0), status: 'todo', priority: 'medium',
-    title: 'Set up status page for launch week', ownerType: 'unassigned', ...myWeb,
+    title:
+      'Set up a status page for launch week: uptime badges for gateway + relay, incident template, and a subscribe-to-updates link surfaced from the footer of every page',
+    ownerType: 'unassigned', ...myWeb,
   },
   {
     id: 'task_06', at: at(2, 14, 0), status: 'todo', priority: 'low',

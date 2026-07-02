@@ -18,15 +18,19 @@ export type Priority = 'low' | 'medium' | 'high';
 /** memorize OwnerType, verbatim. */
 export type OwnerType = 'human' | 'agent' | 'unassigned';
 
-/** Per-event provenance (memorize 3.0.0 Phase 0): who wrote it, from where. */
+/**
+ * Per-event provenance (memorize 3.0.0 Phase 0): who wrote it, from where.
+ * Both fields are optional on the DomainEvent itself — events captured before
+ * Phase 0 carry neither, so every consumer needs a render fallback.
+ */
 export interface Provenance {
   /** Originating actor identity (DomainEvent.writer). */
-  writer: string;
+  writer?: string;
   /**
    * Originating store id (DomainEvent.sourceProjectId). Internal id — shown
    * only in detail panels, never as the leading label.
    */
-  sourceProjectId: string;
+  sourceProjectId?: string;
   /** Server-resolved display name for the source store (the translation layer). */
   sourceProjectLabel?: string;
 }
@@ -61,7 +65,16 @@ export type DomainTimelineItem =
   | (TimelineItemBase & { type: 'task.created'; title: string })
   | (TimelineItemBase & { type: 'task.updated'; title: string; status: TaskStatus })
   | (TimelineItemBase & { type: 'handoff.created'; title: string })
-  | (TimelineItemBase & { type: 'session.started' | 'session.completed'; agent: string });
+  | (TimelineItemBase & {
+      /**
+       * Session lifecycle worth a system line. In real stores sessions mostly
+       * end as `paused` (agents rarely emit `completed`) — measured 71
+       * started / 70 paused / 24 resumed / 0 completed — so the feed must
+       * render pause/resume, not just start/complete. `heartbeat` stays out.
+       */
+      type: 'session.started' | 'session.resumed' | 'session.paused' | 'session.completed';
+      agent: string;
+    });
 
 /**
  * Sync arrivals are deliberately NOT feed items: sync is heading toward
