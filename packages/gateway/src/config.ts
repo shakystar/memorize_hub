@@ -7,6 +7,8 @@ export interface GatewayConfig {
   dbFile: string;
   /** Internal relay base URL — reached over localhost / a private network. */
   relayUrl: string;
+  /** Internal headless replica base URL for read projections. */
+  replicaUrl: string;
   /** Bearer token the gateway presents to the (token-gated) relay. */
   relayToken: string | undefined;
   /** Public base URL — used for join/invite URLs and the OAuth callback. */
@@ -54,6 +56,7 @@ export function loadGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
     port: positiveInt(env.GATEWAY_PORT, 8080, 'GATEWAY_PORT'),
     dbFile: env.GATEWAY_DB || './gateway.db',
     relayUrl: (env.RELAY_URL || 'http://127.0.0.1:8787').replace(/\/+$/, ''),
+    replicaUrl: (env.REPLICA_URL || 'http://127.0.0.1:8790').replace(/\/+$/, ''),
     relayToken: env.RELAY_INTERNAL_TOKEN || undefined,
     publicUrl: env.GATEWAY_PUBLIC_URL ? env.GATEWAY_PUBLIC_URL.replace(/\/+$/, '') : undefined,
     googleClientId: env.GOOGLE_CLIENT_ID || undefined,

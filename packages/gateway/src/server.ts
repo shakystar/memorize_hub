@@ -12,6 +12,7 @@ import { handleDeviceCode, handleDeviceToken } from './device-api.js';
 import { sendError, sendJson } from './http.js';
 import { handleSpa, isSpaPath } from './spa.js';
 import { handleEventsProxy, handlePersonalStore } from './proxy.js';
+import { handleWorkspaceTimeline } from './timeline.js';
 import {
   createWorkspace,
   deleteWorkspace,
@@ -48,6 +49,7 @@ import {
 const EVENTS_ROUTE = /^\/v1\/projects\/([^/]+)\/events$/;
 const CLONE_PAGE = /^\/clone\/([^/]+)$/;
 const WS_ID = /^\/v1\/workspaces\/([^/]+)$/;
+const WS_TIMELINE = /^\/v1\/workspaces\/([^/]+)\/timeline$/;
 const WS_INVITES = /^\/v1\/workspaces\/([^/]+)\/invites$/;
 const WS_INVITE_ID = /^\/v1\/workspaces\/([^/]+)\/invites\/([^/]+)$/;
 const WS_MEMBER = /^\/v1\/workspaces\/([^/]+)\/members\/([^/]+)$/;
@@ -118,6 +120,10 @@ async function route(
   if (method === 'POST' && p === '/v1/workspaces') return createWorkspace(req, res, ctx);
   if (method === 'POST' && p === '/v1/workspaces/join') return joinWorkspace(req, res, ctx);
 
+  const timeline = WS_TIMELINE.exec(p);
+  if (timeline && method === 'GET') {
+    return handleWorkspaceTimeline(req, res, ctx, decode(timeline[1]), url.searchParams);
+  }
   const inviteId = WS_INVITE_ID.exec(p);
   if (inviteId && method === 'DELETE') {
     return revokeInvite(req, res, ctx, decode(inviteId[1]), decode(inviteId[2]));
