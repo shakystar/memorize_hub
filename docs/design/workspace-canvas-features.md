@@ -40,6 +40,10 @@
   쪽)으로 옮긴다. 이로써 §2의 "[지금] 층 실데이터로 타임라인을 채운다"는 근거는
   약화되고, now-층에서 타임라인이 갖는 것은 **온보딩 빈 상태 + 첫 sync 도착
   감지**로 좁혀진다 - 축 선택의 나머지 두 근거(P5 빈-상태, 비개발자 문법)는 유효.
+- **지식 탭 제거, Talk 탭 추가** (2026-07-03). 출시 탭은 Timeline·Tasks 둘;
+  나머지(Talk/Decisions/Sources)는 TBD 그룹으로 탭바에서 구분선 분리. Talk는
+  placeholder에 구현 메커니즘을 명시한다(§3). 지식의 역할은 검색·결정·타임라인
+  으로 분산, 부활 후보는 memory map(§8).
 - **소스(Sources) 탭 추가** (2026-07-02 후속 세션). 기억이 참조하는 원본 파일을
   워크스페이스에 올려 다른 기기의 에이전트가 요청 시 받아가게 한다. 저장소의
   자리는 relay가 아니라 **모노레포 세 번째 패키지**(gateway-fronted 불투명 블롭
@@ -96,9 +100,17 @@ invites/roles/leave/delete는 기존 구현 유지).
   - **빈 상태 = 온보딩** [지금]: "내 에이전트 연결" 가이드 - 하니스별 설치 안내 +
     `memorize login`(device-auth, 키 복사 제로) + 첫 sync 도착을 화면이 감지해
     축하하는 "aha". 현 sync 퀵스타트 블록의 진화형.
-- **지식** [replica]: ConsolidatedMemory 브라우즈 - kind(결정/이유/진행) x tag x
-  salience(1-10) 정렬, validity 체인(superseded/retracted는 접힘 - 삭제 없음),
-  출처 observation 상세 패널. 살아있는 문서 뷰.
+- ~~**지식**~~ **v1 캔버스에서 제거** (2026-07-03 결정, mock까지 만들었다 폐기).
+  역할이 다른 표면으로 분산됐다: 목적어 있는 회수 → 글로벌 검색, 현재 결정
+  상태 → 결정 탭, 흐름 → 타임라인. 부활 후보 아이디어로 **memory map**(임베딩·
+  태그 기반 클러스터 그래프) [replica]가 있으나 결정 아님 - §8 참고.
+- **Talk** [replica + memorize 협력]: 워크스페이스 에이전트에게 말 걸기. 메커니즘
+  까지 탭 placeholder에 명시(방문자가 허풍으로 안 믿는 문제 방지): 웹에서 쓴
+  메시지가 공유 로그의 이벤트가 되고, 각 멤버의 에이전트가 다음 sync 때 풀해
+  세션 시작 시 주입받는다. **Hub는 LLM을 안 돌린다([[H060]]) - 답하는 지능은
+  항상 사용자 기기.** 2단계: ①비동기(음성사서함형, authoring 1단계의 message
+  이벤트로 충분) → ②실시간(H900 SSE push + 기기 쪽 상시 구독 에이전트 필요,
+  memorize 신규 컴포넌트). v1은 탭 + 정의 + 개발 예정 배지만.
 - **작업** [replica]: task/handoff/checkpoint 보드(진행중/handoff_ready/done).
 - **결정** [replica]: decision 로그(proposed→accepted→superseded 체인). "우리가
   뭘 왜 결정했나" - 기획자 타깃 친화.
@@ -183,3 +195,9 @@ route로 push하는 write path([[H060]] 빌드플랜 §4)를 탄다. gateway에 
   제공하지 않는다([[H070]], `h060-read-surface-build.md` §7.3) - 그 UI 표기는
   E2E 착수 시 결정.
 - tier/quota 수치([[H080]] entitlements seam) - 결제 도입 시점의 결정.
+- **memory map**(지식 탭 부활 후보): 임베딩·태그 기반 클러스터 그래프. 재료는
+  이미 있다 - 클라이언트 memorize.db에 `embeddings` 테이블이 있고 tags 채움율
+  97-100% 실측. 단 임베딩이 이벤트가 아니라 로컬 projection이라 replica 쪽
+  재계산 vs 동기화 결정이 선행돼야 하고, 그래프 뷰의 실사용 가치(Obsidian
+  graph 류의 "한 번 보고 마는" 위험) 검증도 필요 - 데모/랜딩 시각 자산으로의
+  가치와 분리해서 판단할 것.
