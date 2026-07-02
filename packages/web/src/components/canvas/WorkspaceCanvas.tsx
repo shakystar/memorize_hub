@@ -13,13 +13,14 @@ import { MOCK_ENABLED, MOCK_KNOWLEDGE, MOCK_TIMELINE } from '@/lib/mock';
  * renders badged mock data so the design can be reviewed now.
  */
 
-type Tab = 'timeline' | 'knowledge' | 'tasks' | 'decisions';
+type Tab = 'timeline' | 'knowledge' | 'tasks' | 'decisions' | 'sources';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'timeline', label: 'Timeline' },
   { id: 'knowledge', label: 'Knowledge' },
   { id: 'tasks', label: 'Tasks' },
   { id: 'decisions', label: 'Decisions' },
+  { id: 'sources', label: 'Sources' },
 ];
 
 function initialTab(): Tab {
@@ -79,6 +80,13 @@ export function WorkspaceCanvas({ meEmail }: { meEmail: string }) {
         {tab === 'decisions' && (
           <ComingSoon title="Decisions">
             The decision log — every accepted decision with its history, including what it replaced.
+          </ComingSoon>
+        )}
+        {tab === 'sources' && (
+          <ComingSoon title="Sources">
+            The files behind the memories. When a memory says &ldquo;see the pricing doc&rdquo;, the
+            doc itself lives here — uploaded once, then fetchable on demand by any member or their
+            agent, from any machine.
           </ComingSoon>
         )}
       </div>
