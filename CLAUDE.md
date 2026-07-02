@@ -45,9 +45,11 @@ The sibling `memorize` repo holds the client.
   store, env config, vitest unit + HTTP contract tests. Reference behavior lives in
   `../memorize/tests/harness/relay-stub.ts` + the golden round-trip there.
 - **gateway** - `packages/gateway`: control-plane DB (better-sqlite3),
-  project-scoped API keys, ACL reverse proxy, beta access-request page,
-  `hub-gateway-admin` CLI (manual approval), and a two-replica async-convergence
+  project-scoped API keys, ACL reverse proxy, and a two-replica async-convergence
   e2e through the gateway (`pnpm --filter @shakystar/memorize-hub-gateway e2e`).
+  (The beta access-request page and the `hub-gateway-admin` CLI are retired -
+  onboarding is git-style `memorize login`/`clone`, and `/admin` is the only
+  operator surface.)
   - **M4 done** - Google-OAuth (OIDC) operator dashboard (`/admin`) + participant
     self-service (`/account`), per-key project scoping + read-only keys. (Auth
     revised from GitHub OAuth so non-developers aren't gated on a GitHub account;
