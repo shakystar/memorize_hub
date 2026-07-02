@@ -1,10 +1,22 @@
+import { createHash } from 'node:crypto';
+
 import { createHttpSyncTransport } from '@shakystar/memorize/dist/adapters/sync-transport-http.js';
-import type { ConsolidatedMemoryKind } from '@shakystar/memorize/dist/domain/entities.js';
+import {
+  ACTOR_SYSTEM,
+  CURRENT_SCHEMA_VERSION,
+} from '@shakystar/memorize/dist/domain/common.js';
+import type {
+  ConsolidatedMemoryKind,
+  Project,
+} from '@shakystar/memorize/dist/domain/entities.js';
 import type { DomainEvent } from '@shakystar/memorize/dist/domain/events.js';
 import type { SyncPullResult } from '@shakystar/memorize/dist/domain/sync-protocol.js';
 import { listValidMemories } from '@shakystar/memorize/dist/services/projection-store.js';
 import { pullProject } from '@shakystar/memorize/dist/services/sync-service.js';
-import { readEvents } from '@shakystar/memorize/dist/storage/event-store.js';
+import {
+  insertExternalEvents,
+  readEvents,
+} from '@shakystar/memorize/dist/storage/event-store.js';
 
 import { bindWorkspaceStore, serverStoreId } from './workspace.js';
 
@@ -47,6 +59,58 @@ function memoryIdFromEvent(event: DomainEvent): string | undefined {
   return typeof payload.id === 'string' ? payload.id : undefined;
 }
 
+function projectIdFromCreatedEvent(event: DomainEvent): string | undefined {
+  if (event.type !== 'project.created') return undefined;
+  const payload = event.payload as { id?: unknown };
+  return typeof payload.id === 'string' ? payload.id : undefined;
+}
+
+function timelineGenesisEventId(storeId: string): string {
+  const digest = createHash('sha256').update(storeId).digest('hex').slice(0, 24);
+  return `evt_hub_timeline_genesis_${digest}`;
+}
+
+async function ensureTimelineProject(storeId: string, workspaceId: string): Promise<void> {
+  const events = await readEvents(storeId);
+  if (events.some((event) => projectIdFromCreatedEvent(event) === storeId)) return;
+
+  const now = new Date().toISOString();
+  const project: Project = {
+    id: storeId,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    createdAt: now,
+    updatedAt: now,
+    title: 'Hub Timeline',
+    summary: `Server-side Timeline read lane for ${workspaceId}`,
+    goals: [],
+    status: 'active',
+    rootPath: `hub://${workspaceId}`,
+    importedContextCount: 0,
+    activeWorkstreamIds: [],
+    activeTaskIds: [],
+    acceptedDecisionIds: [],
+    ruleIds: [],
+  };
+
+  // Local-only read-model anchor: do not push this event back to the relay.
+  await insertExternalEvents(storeId, [
+    {
+      id: timelineGenesisEventId(storeId),
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      createdAt: now,
+      updatedAt: now,
+      type: 'project.created',
+      projectId: storeId,
+      scopeType: 'project',
+      scopeId: storeId,
+      actor: ACTOR_SYSTEM,
+      writer: ACTOR_SYSTEM,
+      sourceProjectId: storeId,
+      payload: project,
+    },
+  ]);
+}
+
 function byAscendingTimeline(a: TimelineMemoryItem, b: TimelineMemoryItem): number {
   if (a.at !== b.at) return a.at < b.at ? -1 : 1;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
@@ -68,6 +132,7 @@ export async function readTimeline(
     workspaceId: params.workspaceId,
     hubUrl: params.hubUrl,
   });
+  await ensureTimelineProject(storeId, params.workspaceId);
 
   const pulled = await pullProject(
     storeId,
