@@ -126,7 +126,9 @@ fine.
   DB (users/tokens/ACL), **project-scoped API keys** (per-project token scoping,
   done in the gateway not the relay), ACL reverse proxy that injects the relay's
   internal token, public **beta access-request page** + `hub-gateway-admin`
-  manual-approval CLI, and a two-replica async-convergence e2e through the gateway.
+  manual-approval CLI (both retired since - onboarding is git-style
+  `memorize login`/`clone`, and `/admin` is the only operator surface), and a
+  two-replica async-convergence e2e through the gateway.
 - **M4 (done)** - operator **OAuth login + dashboard** (`/admin`) + participant
   self-service (`/account`), browser approval UI, per-key project scoping +
   read-only keys. Decision resolved: **Google OAuth (OIDC)** (one client, one

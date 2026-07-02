@@ -134,8 +134,9 @@ open  https://<your-app-name>.fly.dev/admin          # Google sign-in -> dashboa
 
 ### 5. Onboard a beta participant
 1. They submit the form at `/beta` (email + their project id).
-2. You approve at `/admin` (or `hub-gateway-admin requests approve <id>` via
-   `fly ssh console`) - the dashboard shows the **one-time API key**.
+2. You approve at `/admin` - the dashboard shows the **one-time API key**.
+   (The `hub-gateway-admin` CLI was retired with the rebuild; `/admin` is the
+   only operator surface.)
 3. Send them the key. They configure memorize:
    `memorize project sync --bind <projectId>` then sync with
    `--remote-url https://<your-app-name>.fly.dev --token <key>`.

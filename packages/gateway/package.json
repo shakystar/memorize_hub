@@ -6,9 +6,6 @@
   "author": "shakystar",
   "description": "memorize Hub control-plane gateway — public edge: account auth (API keys + GitHub OAuth session), workspace/membership/invite control-plane, personal store, and a reverse proxy to the dumb relay. Clean rebuild for cross-account workspaces (see docs/protocol/ + docs/SoT/).",
   "type": "module",
-  "bin": {
-    "hub-gateway-admin": "dist/admin-cli.js"
-  },
   "scripts": {
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
