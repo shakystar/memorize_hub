@@ -21,7 +21,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'decisions', label: 'Decisions' },
 ];
 
-export function WorkspaceCanvas() {
+export function WorkspaceCanvas({ meEmail }: { meEmail: string }) {
   const [tab, setTab] = useState<Tab>('timeline');
 
   return (
@@ -47,6 +47,7 @@ export function WorkspaceCanvas() {
         {tab === 'timeline' && (
           <TimelineTab
             items={MOCK_ENABLED ? MOCK_TIMELINE : []}
+            meEmail={meEmail}
             mock={MOCK_ENABLED}
             emptyState={<TimelineEmptyState />}
           />

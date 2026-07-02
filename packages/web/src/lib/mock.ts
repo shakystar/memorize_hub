@@ -44,18 +44,29 @@ export const MOCK_WORKSPACES: Workspace[] = [
   },
 ];
 
-const web = { writer: 'web', sourceProjectId: 'wsp_mock_launch', sourceProjectLabel: 'web' };
-const kantApp = { writer: 'claude-code', sourceProjectId: 'proj_mock_app', sourceProjectLabel: 'launch-app' };
-const kantSite = { writer: 'claude-code', sourceProjectId: 'proj_mock_site', sourceProjectLabel: 'landing-site' };
-const mina = { writer: 'claude-desktop', sourceProjectId: 'proj_mock_brand', sourceProjectLabel: 'brand-guide' };
+const myApp = {
+  member: 'you@example.com', writer: 'claude-code',
+  sourceProjectId: 'proj_mock_app', sourceProjectLabel: 'launch-app',
+};
+const myWeb = {
+  member: 'you@example.com', writer: 'web',
+  sourceProjectId: 'wsp_mock_launch', sourceProjectLabel: 'web',
+};
+const kant = {
+  member: 'kant@example.com', writer: 'claude-code',
+  sourceProjectId: 'proj_mock_site', sourceProjectLabel: 'landing-site',
+};
+const mina = {
+  member: 'mina@example.com', writer: 'claude-desktop',
+  sourceProjectId: 'proj_mock_brand', sourceProjectLabel: 'brand-guide',
+};
 
 /** A three-member team's last few days, mixing every feed item shape. */
 export const MOCK_TIMELINE: TimelineItem[] = [
-  { id: 'evt_01', at: at(0, 10, 12), type: 'sync.push', member: 'kant@example.com' },
   {
     id: 'evt_02', at: at(0, 10, 12), type: 'memory.consolidated', kind: 'progress',
     text: 'Checkout flow copy finalized; legal approved the refund wording.',
-    salience: 6, tags: ['copy', 'checkout'], ...kantApp,
+    salience: 6, tags: ['copy', 'checkout'], ...myApp,
   },
   {
     id: 'evt_03', at: at(0, 9, 40), type: 'task.updated',
@@ -66,31 +77,29 @@ export const MOCK_TIMELINE: TimelineItem[] = [
     text: 'Hero image A/B: photo variant beat illustration on every segment, so the brand guide drops the illustration rule for landing pages.',
     salience: 8, tags: ['brand', 'a-b-test'], ...mina,
   },
-  { id: 'evt_05', at: at(0, 8, 58), type: 'sync.push', member: 'mina@example.com' },
   {
     id: 'evt_06', at: at(1, 17, 30), type: 'decision.accepted',
-    title: 'Launch date moves to the 15th — payment-provider review needs the buffer.', ...kantApp,
+    title: 'Launch date moves to the 15th — payment-provider review needs the buffer.', ...kant,
   },
   {
     id: 'evt_07', at: at(1, 17, 2), type: 'memory.consolidated', kind: 'decision',
     text: 'Pricing page ships with three tiers; the enterprise tier is contact-only until quota enforcement lands.',
-    salience: 9, tags: ['pricing'], ...kantApp,
+    salience: 9, tags: ['pricing'], ...myApp,
   },
   {
     id: 'evt_08', at: at(1, 15, 20), type: 'handoff.created',
-    title: 'Landing hero implementation -> whoever picks up the site session', ...kantSite,
+    title: 'Landing hero implementation -> whoever picks up the site session', ...kant,
   },
-  { id: 'evt_09', at: at(1, 14, 55), type: 'session.completed', agent: 'claude-code', ...kantSite },
+  { id: 'evt_09', at: at(1, 14, 55), type: 'session.completed', agent: 'claude-code', ...kant },
   {
     id: 'evt_10', at: at(1, 13, 10), type: 'memory.retracted',
-    text: 'Old note that the beta waitlist gates signups — the gate was removed.', ...web,
+    text: 'Old note that the beta waitlist gates signups — the gate was removed.', ...myWeb,
   },
   { id: 'evt_11', at: at(2, 19, 45), type: 'task.created', title: 'Draft launch announcement email', ...mina },
   {
     id: 'evt_12', at: at(2, 18, 20), type: 'memory.consolidated', kind: 'progress',
     text: 'Signup funnel instrumented end to end; drop-off dashboards live.',
-    salience: 5, tags: ['analytics'], ...kantApp,
+    salience: 5, tags: ['analytics'], ...myApp,
   },
-  { id: 'evt_13', at: at(2, 18, 4), type: 'sync.pull', member: 'you@example.com' },
-  { id: 'evt_14', at: at(2, 9, 30), type: 'session.started', agent: 'claude-code', ...kantApp },
+  { id: 'evt_14', at: at(2, 9, 30), type: 'session.started', agent: 'claude-code', ...kant },
 ];

@@ -29,6 +29,12 @@ interface TimelineItemBase extends Provenance {
   id: string;
   /** ISO-8601 timestamp. */
   at: string;
+  /**
+   * The workspace member (account email) this item belongs to — server-resolved
+   * from the source store's owner. The chat-style timeline groups by member
+   * (mine right, others left); writer/source are per-bubble metadata.
+   */
+  member: string;
 }
 
 /**
@@ -52,20 +58,8 @@ export type DomainTimelineItem =
   | (TimelineItemBase & { type: 'session.started' | 'session.completed'; agent: string });
 
 /**
- * [now] Control-plane feed item — a gateway-observed sync arrival, not a
- * DomainEvent. The member (account) is the only attribution the control-plane
- * has (per-repo attribution is payload-internal, replica-only — H010).
+ * Sync arrivals are deliberately NOT feed items: sync is heading toward
+ * realtime, so per-arrival rows would flood the timeline. Sync visibility
+ * belongs in aggregate form (e.g. a per-member "last synced" indicator).
  */
-export interface SyncTimelineItem {
-  id: string;
-  at: string;
-  type: 'sync.push' | 'sync.pull';
-  /** The syncing member's account email. */
-  member: string;
-}
-
-export type TimelineItem = DomainTimelineItem | SyncTimelineItem;
-
-export function isSyncItem(item: TimelineItem): item is SyncTimelineItem {
-  return item.type === 'sync.push' || item.type === 'sync.pull';
-}
+export type TimelineItem = DomainTimelineItem;

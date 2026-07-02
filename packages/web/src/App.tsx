@@ -176,7 +176,7 @@ function WorkspaceView({
         </div>
       </div>
 
-      <WorkspaceCanvas />
+      <WorkspaceCanvas meEmail={me.email} />
     </div>
   );
 }

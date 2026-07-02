@@ -1,79 +1,88 @@
-import {
-  ArrowRightLeft,
-  CircleCheckBig,
-  CirclePlay,
-  CircleStop,
-  Gavel,
-  RefreshCw,
-  Sparkles,
-  Undo2,
-} from 'lucide-react';
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
-import { type DomainTimelineItem, type TimelineItem, isSyncItem } from '@/lib/domain';
+import type { DomainTimelineItem, TimelineItem } from '@/lib/domain';
 
 /**
- * The workspace timeline — the canvas's primary view (activity feed, spec
- * docs/design/workspace-canvas-features.md §3). Day-grouped, filterable by
- * actor, every domain item labeled with its provenance ("who · from where").
+ * The workspace timeline — the canvas's primary view, in chat grammar
+ * (docs/design/workspace-canvas-features.md §3): my items on the right,
+ * other members' on the left with avatar + name, sessions as centered
+ * system lines. Chronological (newest at the bottom), day-divided,
+ * filterable by member.
  */
 export function TimelineTab({
   items,
+  meEmail,
   mock,
   emptyState,
 }: {
   items: TimelineItem[];
+  /** The signed-in member — their items render on the right, unnamed. */
+  meEmail: string;
   /** True when the feed is dev-only mock data — always badged, never silent. */
   mock?: boolean;
   emptyState: ReactNode;
 }) {
-  const [actor, setActor] = useState<string | null>(null);
+  const [member, setMember] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  const actors = useMemo(
-    () => [...new Set(items.map((i) => (isSyncItem(i) ? i.member : i.writer)))],
-    [items],
-  );
-  const visible = actor
-    ? items.filter((i) => (isSyncItem(i) ? i.member : i.writer) === actor)
-    : items;
+  const members = useMemo(() => [...new Set(items.map((i) => i.member))], [items]);
+  const visible = member ? items.filter((i) => i.member === member) : items;
   const days = useMemo(() => groupByDay(visible), [visible]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' });
+  }, [visible.length]);
 
   if (items.length === 0) return <>{emptyState}</>;
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-6 py-4">
-      <div className="flex flex-wrap items-center gap-1.5 pb-3">
+    <div className="mx-auto flex w-full max-w-2xl flex-col px-6 py-4">
+      <div className="flex flex-wrap items-center gap-1.5 pb-4">
         {mock && (
           <span className="rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground">
             Mock data — dev only
           </span>
         )}
-        <ActorChip label="Everyone" active={actor === null} onClick={() => setActor(null)} />
-        {actors.map((a) => (
-          <ActorChip key={a} label={a} active={actor === a} onClick={() => setActor(a)} />
+        <MemberChip label="Everyone" active={member === null} onClick={() => setMember(null)} />
+        {members.map((m) => (
+          <MemberChip
+            key={m}
+            label={m === meEmail ? 'Me' : shortName(m)}
+            active={member === m}
+            onClick={() => setMember(m)}
+          />
         ))}
       </div>
 
       {days.map(([label, dayItems]) => (
         <section key={label}>
-          <h2 className="sticky top-0 bg-background py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {label}
-          </h2>
-          <ol className="mb-4 space-y-1">
-            {dayItems.map((item) => (
-              <li key={item.id}>
-                <TimelineRow item={item} />
-              </li>
-            ))}
-          </ol>
+          <div className="flex items-center gap-3 py-3">
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <div className="space-y-3">
+            {groupByAuthor(dayItems).map((group, i) =>
+              group.kind === 'system' ? (
+                <SystemLine key={group.items[0]?.id ?? i} item={group.items[0]} />
+              ) : (
+                <MessageGroup
+                  key={group.items[0]?.id ?? i}
+                  items={group.items}
+                  mine={group.member === meEmail}
+                />
+              ),
+            )}
+          </div>
         </section>
       ))}
+      <div ref={bottomRef} />
     </div>
   );
 }
 
-function ActorChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function MemberChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -89,92 +98,129 @@ function ActorChip({ label, active, onClick }: { label: string; active: boolean;
   );
 }
 
-function TimelineRow({ item }: { item: TimelineItem }) {
-  if (isSyncItem(item)) {
-    return (
-      <div className="flex items-center gap-3 rounded-md px-2 py-1 text-xs text-muted-foreground">
-        <RefreshCw className="size-3.5 shrink-0" />
-        <span className="min-w-0 truncate">
-          {item.member} synced ({item.type === 'sync.push' ? 'sent updates' : 'received updates'})
-        </span>
-        <Time at={item.at} />
-      </div>
-    );
-  }
-  return <DomainRow item={item} />;
-}
-
-function DomainRow({ item }: { item: DomainTimelineItem }) {
-  const { icon, badge, body, muted } = describe(item);
+/** One member's consecutive run of items: avatar + name once, bubbles stacked. */
+function MessageGroup({ items, mine }: { items: DomainTimelineItem[]; mine: boolean }) {
+  const head = items[0];
+  if (!head) return null;
   return (
-    <div className="flex gap-3 rounded-md px-2 py-2 hover:bg-secondary/50">
-      <span className="mt-0.5 shrink-0 text-muted-foreground [&_svg]:size-4">{icon}</span>
-      <div className="min-w-0 flex-1">
-        <p className={cn('text-sm', muted && 'text-muted-foreground line-through')}>{body}</p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-          {badge}
-          <span>
-            {item.writer} · {item.sourceProjectLabel ?? item.sourceProjectId}
-          </span>
-          <Time at={item.at} />
-        </p>
+    <div className={cn('flex gap-2', mine && 'flex-row-reverse')}>
+      {!mine && (
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-xs font-semibold">
+          {shortName(head.member)[0]?.toUpperCase() ?? '?'}
+        </span>
+      )}
+      <div className={cn('flex min-w-0 max-w-[85%] flex-col gap-1', mine && 'items-end')}>
+        {!mine && <p className="px-1 text-xs text-muted-foreground">{shortName(head.member)}</p>}
+        {items.map((item) => (
+          <Bubble key={item.id} item={item} mine={mine} />
+        ))}
       </div>
     </div>
   );
 }
 
-const KIND_LABEL = { decision: 'Decision', rationale: 'Why', progress: 'Progress' } as const;
-
-function describe(item: DomainTimelineItem): {
-  icon: ReactNode;
-  badge?: ReactNode;
-  body: string;
-  muted?: boolean;
-} {
-  switch (item.type) {
-    case 'memory.consolidated':
-      return {
-        icon: <Sparkles />,
-        badge: <Badge>{KIND_LABEL[item.kind]}</Badge>,
-        body: item.text,
-      };
-    case 'memory.retracted':
-      return { icon: <Undo2 />, badge: <Badge>Retracted</Badge>, body: item.text, muted: true };
-    case 'decision.accepted':
-      return { icon: <Gavel />, badge: <Badge>Decision</Badge>, body: item.title };
-    case 'task.created':
-      return { icon: <CircleCheckBig />, badge: <Badge>New task</Badge>, body: item.title };
-    case 'task.updated':
-      return {
-        icon: <CircleCheckBig />,
-        badge: <Badge>{item.status.replace('_', ' ')}</Badge>,
-        body: item.title,
-      };
-    case 'handoff.created':
-      return { icon: <ArrowRightLeft />, badge: <Badge>Handoff</Badge>, body: item.title };
-    case 'session.started':
-      return { icon: <CirclePlay />, body: `${item.agent} started a session` };
-    case 'session.completed':
-      return { icon: <CircleStop />, body: `${item.agent} finished a session` };
-  }
+function Bubble({ item, mine }: { item: DomainTimelineItem; mine: boolean }) {
+  const { badge, body, muted } = describe(item);
+  return (
+    <div className={cn('flex items-end gap-1.5', mine && 'flex-row-reverse')}>
+      <div
+        className={cn(
+          'rounded-2xl px-3 py-2',
+          mine ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-tl-md bg-secondary',
+        )}
+      >
+        {badge && (
+          <span
+            className={cn(
+              'mb-1 mr-1.5 inline-block rounded-full border px-1.5 py-px text-[11px]',
+              mine ? 'border-primary-foreground/30 text-primary-foreground/80' : 'border-border text-muted-foreground',
+            )}
+          >
+            {badge}
+          </span>
+        )}
+        <span className={cn('text-sm', muted && 'line-through opacity-70')}>{body}</span>
+        <p className={cn('mt-1 text-[11px]', mine ? 'text-primary-foreground/60' : 'text-muted-foreground')}>
+          {item.writer} · {item.sourceProjectLabel ?? item.sourceProjectId}
+        </p>
+      </div>
+      <Time at={item.at} />
+    </div>
+  );
 }
 
-function Badge({ children }: { children: ReactNode }) {
+/** Session start/end reads like a chat system message, not a bubble. */
+function SystemLine({ item }: { item: DomainTimelineItem }) {
+  if (item.type !== 'session.started' && item.type !== 'session.completed') return null;
+  const verb = item.type === 'session.started' ? 'started a session' : 'finished a session';
   return (
-    <span className="rounded-full border border-border px-1.5 py-px text-[11px]">{children}</span>
+    <p className="text-center text-xs text-muted-foreground">
+      {item.agent} {verb} · {item.sourceProjectLabel ?? item.sourceProjectId} ·{' '}
+      {formatTime(item.at)}
+    </p>
   );
+}
+
+const KIND_LABEL = { decision: 'Decision', rationale: 'Why', progress: 'Progress' } as const;
+
+function describe(item: DomainTimelineItem): { badge?: string; body: string; muted?: boolean } {
+  switch (item.type) {
+    case 'memory.consolidated':
+      return { badge: KIND_LABEL[item.kind], body: item.text };
+    case 'memory.retracted':
+      return { badge: 'Retracted', body: item.text, muted: true };
+    case 'decision.accepted':
+      return { badge: 'Decision', body: item.title };
+    case 'task.created':
+      return { badge: 'New task', body: item.title };
+    case 'task.updated':
+      return { badge: item.status.replace('_', ' '), body: item.title };
+    case 'handoff.created':
+      return { badge: 'Handoff', body: item.title };
+    case 'session.started':
+    case 'session.completed':
+      return { body: '' }; // rendered as a SystemLine, never a bubble
+  }
 }
 
 function Time({ at }: { at: string }) {
   return (
-    <time dateTime={at} className="ml-auto shrink-0 tabular-nums">
-      {new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+    <time dateTime={at} className="shrink-0 pb-0.5 text-[11px] tabular-nums text-muted-foreground">
+      {formatTime(at)}
     </time>
   );
 }
 
+function formatTime(at: string): string {
+  return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+type AuthorGroup =
+  | { kind: 'messages'; member: string; items: DomainTimelineItem[] }
+  | { kind: 'system'; items: [DomainTimelineItem] };
+
+function isSystem(item: DomainTimelineItem): boolean {
+  return item.type === 'session.started' || item.type === 'session.completed';
+}
+
+/** Split a day into chat runs: consecutive same-member bubbles, system lines standalone. */
+function groupByAuthor(items: TimelineItem[]): AuthorGroup[] {
+  const groups: AuthorGroup[] = [];
+  for (const item of items) {
+    if (isSystem(item)) {
+      groups.push({ kind: 'system', items: [item] });
+      continue;
+    }
+    const last = groups[groups.length - 1];
+    if (last?.kind === 'messages' && last.member === item.member) last.items.push(item);
+    else groups.push({ kind: 'messages', member: item.member, items: [item] });
+  }
+  return groups;
+}
+
+/** Chronological (chat order): oldest day first, newest message at the bottom. */
 function groupByDay(items: TimelineItem[]): Array<[string, TimelineItem[]]> {
-  const sorted = [...items].sort((a, b) => b.at.localeCompare(a.at));
+  const sorted = [...items].sort((a, b) => a.at.localeCompare(b.at));
   const groups = new Map<string, TimelineItem[]>();
   for (const item of sorted) {
     const label = dayLabel(new Date(item.at));
@@ -183,6 +229,10 @@ function groupByDay(items: TimelineItem[]): Array<[string, TimelineItem[]]> {
     else groups.set(label, [item]);
   }
   return [...groups.entries()];
+}
+
+function shortName(email: string): string {
+  return email.split('@')[0] ?? email;
 }
 
 function dayLabel(d: Date): string {
