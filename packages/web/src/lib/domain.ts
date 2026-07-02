@@ -74,7 +74,10 @@ export type TimelineItem = DomainTimelineItem;
  * [replica] A tasks-board card — one Task (`entities/task.ts`) with its
  * latest handoff joined in server-side (`latestHandoffId` →
  * `entities/handoff.ts`), so a handoff_ready card can show what the next
- * machine should do without a second fetch.
+ * machine should do without a second fetch. Field names verbatim from the
+ * entities; the domain defaults list fields to `[]` and the wire omits
+ * empties. No due/start dates — the domain has none (a memorize-side
+ * decision if a calendar/gantt view is ever wanted).
  */
 export interface TaskEntry extends Provenance {
   id: string;
@@ -86,6 +89,16 @@ export interface TaskEntry extends Provenance {
   status: TaskStatus;
   priority: Priority;
   ownerType: OwnerType;
+  description?: string;
+  goal?: string;
+  acceptanceCriteria?: string[];
+  openQuestions?: string[];
+  riskNotes?: string[];
   /** Joined from latestHandoffId; present when status is handoff_ready. */
-  handoff?: { summary: string; nextAction: string };
+  handoff?: {
+    summary: string;
+    nextAction: string;
+    doneItems?: string[];
+    remainingItems?: string[];
+  };
 }

@@ -109,24 +109,41 @@ export const MOCK_TASKS: TaskEntry[] = [
   {
     id: 'task_01', at: at(0, 9, 40), status: 'handoff_ready', priority: 'high',
     title: 'Prepare launch-day social assets', ownerType: 'agent',
+    goal: 'Every channel has ready-to-post assets before launch morning.',
+    description: 'Static banners, the animated teaser, and per-channel copy variants for the launch announcement.',
+    acceptanceCriteria: [
+      'Banner set exported for all four channels',
+      'Teaser rendered at 1080p and approved by mina',
+      'Copy variants reviewed against the brand guide',
+    ],
+    openQuestions: ['Do we localize the teaser captions for the KR audience at launch?'],
     handoff: {
       summary: 'All static assets exported; the animated teaser is storyboarded but not rendered.',
       nextAction: 'Render the teaser from the storyboard and drop it in the shared folder.',
+      doneItems: ['Banner set exported', 'Copy variants drafted'],
+      remainingItems: ['Teaser render', 'Final brand-guide pass'],
     },
     ...mina,
   },
   {
     id: 'task_02', at: at(1, 15, 20), status: 'handoff_ready', priority: 'medium',
     title: 'Landing hero implementation', ownerType: 'agent',
+    goal: 'The landing hero matches the A/B winner pixel-for-pixel.',
     handoff: {
       summary: 'Hero layout matches the winning A/B variant; copy is placeholder.',
       nextAction: 'Swap in the final headline once legal clears it, then close.',
+      doneItems: ['Layout implemented', 'Photo variant assets wired'],
+      remainingItems: ['Final headline'],
     },
     ...kant,
   },
   {
     id: 'task_03', at: at(0, 10, 5), status: 'in_progress', priority: 'high',
-    title: 'Wire pricing page to billing', ownerType: 'agent', ...myApp,
+    title: 'Wire pricing page to billing', ownerType: 'agent',
+    goal: 'Choosing a tier on the pricing page creates a real subscription.',
+    acceptanceCriteria: ['Checkout succeeds for both paid tiers', 'Webhook updates the account plan'],
+    openQuestions: ['Trial length: 7 or 14 days?'],
+    ...myApp,
   },
   {
     id: 'task_04', at: at(0, 11, 30), status: 'in_progress', priority: 'medium',
@@ -142,7 +159,13 @@ export const MOCK_TASKS: TaskEntry[] = [
   },
   {
     id: 'task_07', at: at(1, 16, 45), status: 'blocked', priority: 'high',
-    title: 'Enable live payments', ownerType: 'agent', ...myApp,
+    title: 'Enable live payments', ownerType: 'agent',
+    description: 'Flip the payment provider from test mode to live once their review clears.',
+    riskNotes: [
+      'Blocked on the payment-provider account review — compliance answers submitted, ETA unknown.',
+      'Launch date already moved once for this; escalate if no answer by the 10th.',
+    ],
+    ...myApp,
   },
   {
     id: 'task_08', at: at(1, 17, 0), status: 'done', priority: 'high',
