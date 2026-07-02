@@ -1,9 +1,8 @@
 import { type ReactNode, useState } from 'react';
 
-import { KnowledgeTab } from '@/components/canvas/KnowledgeTab';
 import { TimelineTab } from '@/components/canvas/TimelineTab';
 import { cn } from '@/lib/utils';
-import { MOCK_ENABLED, MOCK_KNOWLEDGE, MOCK_TIMELINE } from '@/lib/mock';
+import { MOCK_ENABLED, MOCK_TIMELINE } from '@/lib/mock';
 
 /**
  * The workspace main canvas: a tab bar over the memory views
@@ -60,16 +59,10 @@ export function WorkspaceCanvas({ meEmail }: { meEmail: string }) {
           />
         )}
         {tab === 'knowledge' && (
-          <KnowledgeTab
-            entries={MOCK_ENABLED ? MOCK_KNOWLEDGE : []}
-            mock={MOCK_ENABLED}
-            emptyState={
-              <ComingSoon title="Knowledge">
-                Everything this workspace has learned, as a living document — decisions, the why
-                behind them, and progress, grouped by topic and sorted by importance.
-              </ComingSoon>
-            }
-          />
+          <ComingSoon title="Knowledge">
+            Everything this workspace has learned, as a living document — decisions, the why
+            behind them, and progress, grouped by topic and sorted by importance.
+          </ComingSoon>
         )}
         {tab === 'tasks' && (
           <ComingSoon title="Tasks">

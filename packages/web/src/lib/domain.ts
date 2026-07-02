@@ -63,26 +63,3 @@ export type DomainTimelineItem =
  * belongs in aggregate form (e.g. a per-member "last synced" indicator).
  */
 export type TimelineItem = DomainTimelineItem;
-
-/**
- * [replica] A knowledge-tab entry — one ConsolidatedMemory with its validity
- * state. Mirrors `entities/memory.ts`: superseding/retracting closes the
- * validity window, it never deletes; the browse view collapses closed entries
- * behind a toggle.
- */
-export interface KnowledgeEntry extends Provenance {
-  id: string;
-  /** ISO-8601 consolidation timestamp. */
-  at: string;
-  /** Owning workspace member (account email), server-resolved as in the timeline. */
-  member: string;
-  kind: ConsolidatedMemoryKind;
-  text: string;
-  /** Importance 1-10, scored at the consolidation boundary. */
-  salience: number;
-  tags?: string[];
-  /** Set when a later memory contradicted this one (memory.superseded). */
-  superseded?: { at: string; note?: string };
-  /** Set when retracted with no replacement (memory.retracted). */
-  retracted?: { at: string };
-}
