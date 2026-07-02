@@ -3,11 +3,11 @@ import { join } from 'node:path';
 
 import { createHttpSyncTransport } from '@shakystar/memorize/dist/adapters/sync-transport-http.js';
 import { CURRENT_SCHEMA_VERSION, createId } from '@shakystar/memorize/dist/domain/common.js';
-import type { ProjectSyncState } from '@shakystar/memorize/dist/domain/entities.js';
 import { pushProject } from '@shakystar/memorize/dist/services/sync-service.js';
 import { appendEvent } from '@shakystar/memorize/dist/storage/event-store.js';
-import { readJson, writeJson } from '@shakystar/memorize/dist/storage/fs-utils.js';
-import { getProjectRoot, getSyncFile } from '@shakystar/memorize/dist/storage/path-resolver.js';
+import { getProjectRoot } from '@shakystar/memorize/dist/storage/path-resolver.js';
+
+import { bindWorkspaceStore, serverStoreId } from './workspace.js';
 
 /**
  * H060 S1 on-demand authoring (deployment form A).
@@ -34,6 +34,8 @@ import { getProjectRoot, getSyncFile } from '@shakystar/memorize/dist/storage/pa
 const VALID_KINDS = ['decision', 'rationale', 'progress'] as const;
 export type AuthorMemoryKind = (typeof VALID_KINDS)[number];
 
+export { serverStoreId } from './workspace.js';
+
 export interface AuthorMemoryParams {
   /** Public gateway base URL, the same edge clients use. */
   hubUrl: string;
@@ -55,23 +57,6 @@ export interface AuthorMemoryResult {
   storeId: string;
   /** Events newly accepted by the Hub on this push. */
   accepted: number;
-}
-
-/**
- * Deterministic per-workspace server store id: the stable "web" lane.
- *
- * Gateway `wsp_` ids are base62 and may contain uppercase letters, but the
- * embedded memorize engine only accepts lowercase local project ids. Keep
- * already-valid suffixes readable for tests/dev, and hex-encode real mixed-case
- * workspace ids into a collision-free lowercase lane id.
- */
-export function serverStoreId(workspaceId: string): string {
-  if (!workspaceId.startsWith('wsp_')) {
-    throw new Error(`workspaceId must be a server-minted wsp_ id, got: ${workspaceId}`);
-  }
-  const suffix = workspaceId.slice('wsp_'.length);
-  if (/^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(suffix)) return `proj_hub_${suffix}`;
-  return `proj_hub_${Buffer.from(workspaceId, 'utf8').toString('hex')}`;
 }
 
 /** Resolve the caller's key to its account via the whoami endpoint. */
@@ -171,27 +156,12 @@ export async function authorMemory(
     } as never,
   });
 
-  const syncFile = getSyncFile(storeId);
-  const existingState = await readJson<ProjectSyncState>(syncFile);
-  const bindingPatch = {
-    remoteProjectId: params.workspaceId,
-    syncEnabled: true,
-    syncTransport: { type: 'http' as const, url: params.hubUrl },
-    updatedAt: now,
-  };
-  await writeJson(
-    syncFile,
-    existingState
-      ? { ...existingState, ...bindingPatch }
-      : {
-          id: `sync_${storeId}`,
-          schemaVersion: CURRENT_SCHEMA_VERSION,
-          createdAt: now,
-          projectId: storeId,
-          syncStatus: 'idle' as const,
-          ...bindingPatch,
-        },
-  );
+  await bindWorkspaceStore({
+    storeId,
+    workspaceId: params.workspaceId,
+    hubUrl: params.hubUrl,
+    now,
+  });
 
   const response = await pushProject(
     storeId,
