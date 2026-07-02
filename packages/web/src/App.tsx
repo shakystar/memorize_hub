@@ -2,6 +2,7 @@ import { BookText, BrainCircuit, Github, Plus, Settings } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
 import { AccountSettings } from '@/components/AccountSettings';
+import { WorkspaceCanvas } from '@/components/canvas/WorkspaceCanvas';
 import { NewWorkspaceDialog } from '@/components/NewWorkspaceDialog';
 import { SharePopover } from '@/components/SharePopover';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { getMe, listWorkspaces, type Me, type Workspace } from '@/lib/api';
+import { MOCK_ENABLED, MOCK_ME, MOCK_WORKSPACES } from '@/lib/mock';
 
 function Sidebar({
   me,
@@ -155,7 +157,6 @@ function WorkspaceView({
   onOpenSettings: () => void;
   onChanged: (opts?: { removed?: boolean }) => void;
 }) {
-  const origin = window.location.origin;
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border px-6 py-3">
@@ -175,29 +176,7 @@ function WorkspaceView({
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-6 p-6">
-        {/* main canvas: reserved for the memory read/write surface (H060) */}
-        <div className="max-w-md rounded-lg border border-dashed border-border p-8 text-center">
-          <p className="text-sm font-medium">Workspace memory</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Browsing and querying this workspace&apos;s memory arrives with the read surface
-            (a separate headless memorize replica). Reserved here.
-          </p>
-          <p className="mt-3 inline-block rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-            개발 예정
-          </p>
-        </div>
-
-        {/* sync quickstart */}
-        <div className="w-full max-w-xl">
-          <p className="text-xs text-muted-foreground">
-            Sync a local folder into this workspace (needs a key from your account, memorize 2.5.0+):
-          </p>
-          <pre className="mt-2 overflow-x-auto rounded-md border border-border bg-card px-3 py-2 text-xs font-mono">
-            memorize auth login --remote-url {origin} --token YOUR_KEY
-          </pre>
-        </div>
-      </div>
+      <WorkspaceCanvas />
     </div>
   );
 }
@@ -253,11 +232,20 @@ export default function App() {
   }, []);
 
   const load = useCallback(async () => {
-    const m = await getMe();
-    setMe(m);
-    if (m) {
-      const ws = await refreshWorkspaces();
-      setSelectedId((cur) => cur ?? ws[0]?.workspaceId ?? null);
+    try {
+      const m = await getMe();
+      setMe(m);
+      if (m) {
+        const ws = await refreshWorkspaces();
+        setSelectedId((cur) => cur ?? ws[0]?.workspaceId ?? null);
+      }
+    } catch (err) {
+      // Dev without a running gateway: fall back to mock identity so the
+      // canvas can be designed against mock data. Never happens in a build.
+      if (!MOCK_ENABLED) throw err;
+      setMe(MOCK_ME);
+      setWorkspaces(MOCK_WORKSPACES);
+      setSelectedId(MOCK_WORKSPACES[0]?.workspaceId ?? null);
     }
   }, [refreshWorkspaces]);
 
