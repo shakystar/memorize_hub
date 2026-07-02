@@ -102,7 +102,8 @@ not-yet 기능은 밀도 있게 채우지 않는다. 메인 캔버스(read surfa
   퀵스타트) + [설정] 패널에 D2 콘텐츠(members/invites/roles/leave/delete) 기존 API로,
   미구현은 "개발 예정". 계정 메뉴에 personal settings(키/개인메모리).
 - **R3 - 연기·gated**: headless replica read/write surface가 캔버스를 채움(H060/H900),
-  워크스페이스 이름/아이콘/색, rename API, opt-out 정책, `/admin`.
+  워크스페이스 이름/아이콘/색, rename API, opt-out 정책, `/admin`. 캔버스에 무엇이
+  들어가는지(타깃 사용자·탭·authoring 단계)는 `workspace-canvas-features.md`가 정한다.
 
 ## 8. 착수 전 확인이 필요한 것
 
