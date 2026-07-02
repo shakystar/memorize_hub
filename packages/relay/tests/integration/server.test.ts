@@ -54,7 +54,9 @@ async function startRelay(
 afterEach(async () => {
   const pending = cleanups;
   cleanups = [];
-  await Promise.all(pending.map((cleanup) => cleanup()));
+  for (const cleanup of pending) {
+    await cleanup();
+  }
 });
 
 async function push(

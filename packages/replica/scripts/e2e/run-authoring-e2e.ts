@@ -1,10 +1,11 @@
 /**
- * H060 S1 verification: a bound replica converges from the authored event.
+ * H060 replica verification: authored events converge and feed Timeline.
  *
  * Boots the real relay + gateway from dist, provisions a user, then:
  *
  *   user machine:  project init + auth login + workspace create
  *   replica:       hub-replica author-memory (as the user, via HUB_API_KEY)
+ *   timeline:      hub-replica timeline from a separate server root
  *   user machine:  project sync --pull
  *
  * PASS means the authored event converges into the user's local store carrying
@@ -108,8 +109,9 @@ const gatewayDb = join(sandbox, 'gateway.db');
 const userHome = join(sandbox, 'user-home');
 const userProj = join(sandbox, 'user-proj');
 const replicaRoot = join(sandbox, 'replica-root');
+const timelineRoot = join(sandbox, 'timeline-root');
 await Promise.all(
-  [userHome, userProj, replicaRoot].map((dir) => mkdir(dir, { recursive: true })),
+  [userHome, userProj, replicaRoot, timelineRoot].map((dir) => mkdir(dir, { recursive: true })),
 );
 
 const { openGatewayDb } = (await import(
@@ -196,6 +198,55 @@ try {
   );
   check('events were accepted by the Hub', result.accepted >= 1, String(result.accepted));
 
+  const timelineRead = await run(
+    process.execPath,
+    [
+      REPLICA_CLI,
+      'timeline',
+      '--hub',
+      gwUrl,
+      '--workspace',
+      created.workspaceId,
+      '--limit',
+      '10',
+    ],
+    { cwd: PKG_ROOT, env: { MEMORIZE_ROOT: timelineRoot, HUB_API_KEY: aliceKey } },
+  );
+  check(
+    'timeline replica pulls + projects the workspace',
+    timelineRead.code === 0,
+    timelineRead.stdout + timelineRead.stderr,
+  );
+  const timeline = timelineRead.code === 0
+    ? (JSON.parse(timelineRead.stdout) as {
+        pulled: { inserted: number };
+        items: Array<{
+          text: string;
+          writer?: string;
+          member: string;
+          sourceProjectId?: string;
+        }>;
+      })
+    : { pulled: { inserted: 0 }, items: [] };
+  const timelineItem = timeline.items.find((item) => item.text.includes('ship the replica'));
+  check('timeline pull inserted remote events', timeline.pulled.inserted >= 1, String(timeline.pulled.inserted));
+  check('timeline contains the web-authored memory', Boolean(timelineItem));
+  check(
+    'timeline item carries writer provenance',
+    timelineItem?.writer === aliceAccount,
+    JSON.stringify({ writer: timelineItem?.writer }),
+  );
+  check(
+    'timeline item is grouped by the author account',
+    timelineItem?.member === aliceAccount,
+    JSON.stringify({ member: timelineItem?.member }),
+  );
+  check(
+    'timeline item preserves the server lane',
+    timelineItem?.sourceProjectId === result.storeId,
+    JSON.stringify({ sourceProjectId: timelineItem?.sourceProjectId, expected: result.storeId }),
+  );
+
   const pull = await cli(userHome, userProj, 'project', 'sync', '--pull');
   check('user pulls new events', /\([1-9]\d* new/.test(pull), pull);
 
@@ -229,8 +280,8 @@ try {
 
   console.log(
     failures === 0
-      ? '\nS1 AUTHORING E2E PASS'
-      : `\nS1 AUTHORING E2E FAIL (${failures} failed checks)`,
+      ? '\nH060 REPLICA E2E PASS'
+      : `\nH060 REPLICA E2E FAIL (${failures} failed checks)`,
   );
   process.exitCode = failures === 0 ? 0 : 1;
 } finally {
