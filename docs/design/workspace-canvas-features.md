@@ -27,6 +27,19 @@
 - **탭은 넓게 스펙한다.** 탭 수는 늘어날 전제고, task 등록·decision 등록 같은
   UI-authoring도 후속 단계에 포함한다(§5). 단 렌더는 "억지로 채우지 않는다" 원칙
   그대로 - 구현된 것만 + 개발 예정 배지(`gateway-web-ux.md` §5).
+- **타임라인 표현 문법 = 채팅형** (2026-07-02, 첫 슬라이스 시각 검증에서 확정,
+  #48). 내 항목은 오른쪽 말풍선(이름 없음), 다른 멤버는 왼쪽 아바타+이름, 연속
+  발화 그룹핑, 날짜 구분선 중앙, 시간순(최신이 아래) + 진입 시 맨 아래 스크롤.
+  세션 시작/종료는 말풍선이 아니라 **중앙 시스템 라인**. 항목의 귀속 단위는
+  **member(계정)** - 서버가 source store를 소유 계정으로 해석해 내려주고(wire에
+  `member` 필드), 에이전트·레포(`writer` · source label)는 말풍선 안 메타로 강등.
+  "내 것 vs 남의 것"이 한눈에 갈리는 게 목적이다.
+- **sync 도착은 피드 아이템이 아니다** (2026-07-02, 같은 검증에서 확정). sync는
+  실시간화(H900의 SSE 방향)를 전제하므로 per-arrival 행은 타임라인을 폭주시킨다.
+  sync 가시성은 **집계 표현**(멤버별 "마지막 동기화" 인디케이터 등, members 크롬
+  쪽)으로 옮긴다. 이로써 §2의 "[지금] 층 실데이터로 타임라인을 채운다"는 근거는
+  약화되고, now-층에서 타임라인이 갖는 것은 **온보딩 빈 상태 + 첫 sync 도착
+  감지**로 좁혀진다 - 축 선택의 나머지 두 근거(P5 빈-상태, 비개발자 문법)는 유효.
 
 ## 1. 사용자 정의 (SoT 유도 페르소나)
 
@@ -67,19 +80,17 @@ invites/roles/leave/delete는 기존 구현 유지).
 
 **탭** (넓게 스펙, 단계 라벨과 함께):
 
-- **타임라인** (기본 탭)
-  - now-층 [지금]: sync 활동 피드 - **멤버(계정)별** push/pull 도착("@kant가 방금
-    동기화함"). replica 없이 캔버스에 실데이터를 준다. 단 현 `usage.ts` 미터링은
-    store x 일 단위 집계뿐이라, 계정·시각 귀속은 프록시가 이미 아는 principal을
-    함께 기록하는 **additive 확장**이 필요하다(content는 여전히 안 읽음, [[H010]]
-    보존). **레포별 귀속은 여기서 불가** - `sourceProjectId`는 opaque payload
-    안이라 [replica]에서만.
-  - later-층 [replica]: 도메인 이벤트 피드 - `memory.consolidated`,
-    `decision.accepted`, task/handoff, session 시작·종료 등을 writer·
-    sourceProjectId 라벨("누가 · 어느 레포에서")로. 일별 그룹, 멤버/레포/종류 필터.
+- **타임라인** (기본 탭, 채팅 문법 - §0)
+  - later-층 [replica]: 도메인 이벤트를 채팅으로 - `memory.consolidated`,
+    `decision.accepted`, task/handoff는 member별 말풍선(kind/status 배지 +
+    본문 + `writer` · source label 메타), session 시작·종료는 시스템 라인.
+    멤버 필터 칩. sync 도착은 여기 없다(§0) - 대신 멤버별 "마지막 동기화"
+    인디케이터 [지금: 현 `usage.ts`는 store x 일 집계뿐이라 계정·시각 귀속은
+    프록시가 이미 아는 principal을 함께 기록하는 additive 확장 필요(content는
+    안 읽음, [[H010]] 보존); 레포별 귀속은 payload 안이라 [replica] 전용].
   - **빈 상태 = 온보딩** [지금]: "내 에이전트 연결" 가이드 - 하니스별 설치 안내 +
     `memorize login`(device-auth, 키 복사 제로) + 첫 sync 도착을 화면이 감지해
-    피드 첫 항목으로 띄우는 "aha". 현 sync 퀵스타트 블록의 진화형.
+    축하하는 "aha". 현 sync 퀵스타트 블록의 진화형.
 - **지식** [replica]: ConsolidatedMemory 브라우즈 - kind(결정/이유/진행) x tag x
   salience(1-10) 정렬, validity 체인(superseded/retracted는 접힘 - 삭제 없음),
   출처 observation 상세 패널. 살아있는 문서 뷰.
