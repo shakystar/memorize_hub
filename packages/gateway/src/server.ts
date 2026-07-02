@@ -28,6 +28,7 @@ import {
   handleAccount,
   handleAccountMe,
   handleAdmin,
+  handleClonePage,
   handleDeviceApprove,
   handleDevicePage,
   handleDocs,
@@ -44,6 +45,7 @@ import {
  */
 
 const EVENTS_ROUTE = /^\/v1\/projects\/([^/]+)\/events$/;
+const CLONE_PAGE = /^\/clone\/([^/]+)$/;
 const WS_ID = /^\/v1\/workspaces\/([^/]+)$/;
 const WS_INVITES = /^\/v1\/workspaces\/([^/]+)\/invites$/;
 const WS_INVITE_ID = /^\/v1\/workspaces\/([^/]+)\/invites\/([^/]+)$/;
@@ -92,6 +94,8 @@ async function route(
   if (p === '/account' || p.startsWith('/account/')) return handleAccount(req, res, ctx, url);
   if (p === '/admin' || p.startsWith('/admin/')) return handleAdmin(req, res, ctx, url);
   if (method === 'GET' && p === '/join') return handleJoinPage(req, res, ctx, url);
+  const clonePage = CLONE_PAGE.exec(p);
+  if (clonePage && method === 'GET') return handleClonePage(req, res, ctx, decode(clonePage[1]));
   if (method === 'GET' && p === '/device') return handleDevicePage(req, res, ctx, url);
   if (method === 'POST' && p === '/device') return handleDeviceApprove(req, res, ctx);
 

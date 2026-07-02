@@ -12,7 +12,7 @@ import type { GatewayContext } from './context.js';
 import { readBody, sendError, sendJson } from './http.js';
 import { redeemInvite } from './invites.js';
 import { getOrCreatePersonalStore } from './personal-store.js';
-import { getStore } from './stores.js';
+import { getStore, memberRole } from './stores.js';
 import {
   beginLogin,
   clearStateCookie,
@@ -118,8 +118,10 @@ export function handleLanding(req: IncomingMessage, res: ServerResponse, ctx: Ga
 </section>
 
 <section class="mt-6">
- <p class="text-sm prose-muted mb-1">Connect a machine once, then clone any project token-free:</p>
- ${cmdBlock(`memorize auth login --remote-url ${origin} --token YOUR_KEY`)}
+ <p class="text-sm prose-muted mb-1">Connect a machine once, then clone any project:</p>
+ ${cmdBlock('npm i -g @shakystar/memorize')}
+ ${cmdBlock(`memorize login ${origin}`)}
+ ${cmdBlock(`memorize clone ${origin}/clone/PROJECT_ID`)}
 </section>
 
 <section class="mt-14 grid gap-4 sm:grid-cols-3">
@@ -186,19 +188,21 @@ const DOC_PAGES: DocPage[] = [
     title: 'Quickstart',
     section: 'Getting started',
     render: (o) => `<h1 class="${H1}">Quickstart</h1>
-<p class="${P}">Sync a project across two machines in four steps. Needs memorize 2.5.0+.</p>
-<h2 class="${H2}">1. Update memorize</h2>
-${cmdBlock('memorize update')}
-<h2 class="${H2}">2. Get a key</h2>
-<p class="${P}">Open the <a href="/app" class="text-accent hover:underline">dashboard</a>, sign in with Google,
- and generate an API key under your account.</p>
-<h2 class="${H2}">3. Log in once per machine</h2>
-<p class="${P}">Store the key host-wide so later commands carry no inline token.</p>
-${cmdBlock(`memorize auth login --remote-url ${o} --token YOUR_KEY`)}
-<h2 class="${H2}">4. Sync a project</h2>
-<p class="${P}">Use <code class="font-mono">clone</code>, not <code class="font-mono">init</code> —
+<p class="${P}">Sync a project across two machines in three steps.</p>
+<h2 class="${H2}">1. Install memorize</h2>
+${cmdBlock('npm i -g @shakystar/memorize')}
+<h2 class="${H2}">2. Log in once per machine</h2>
+<p class="${P}">Opens your browser to approve the device — nothing to paste.</p>
+${cmdBlock(`memorize login ${o}`)}
+<h2 class="${H2}">3. Clone the project</h2>
+<p class="${P}">Every workspace shows its clone URL in the
+ <a href="/app" class="text-accent hover:underline">dashboard</a>. Use
+ <code class="font-mono">clone</code>, not <code class="font-mono">init</code> —
  <code class="font-mono">init</code> forks a new empty project that will not sync.</p>
-${cmdBlock(`memorize project clone PROJECT_ID --remote-url ${o}`)}`,
+${cmdBlock(`memorize clone ${o}/clone/PROJECT_ID`)}
+<h2 class="${H2}">Already have the project locally?</h2>
+<p class="${P}">Attach the remote instead of cloning; sync then needs no flags.</p>
+${cmdBlock(`memorize remote ${o}/clone/PROJECT_ID`)}`,
   },
   {
     slug: 'workspaces',
@@ -796,14 +800,67 @@ export function handleJoinPage(
   const body = `<h1 class="text-2xl font-bold">Workspace joined</h1>
 <p class="mt-2 prose-muted">${verb} <strong class="text-fg">${name}</strong>
  (<code class="font-mono">${htmlEscape(result.storeId)}</code>).</p>
-<p class="mt-4 text-sm prose-muted">Generate a key on your <a href="/account" class="text-accent hover:underline">account</a>,
- log in once per machine, then bind a local folder to this workspace to start syncing shared memory:</p>
-${cmdBlock(`memorize auth login --remote-url ${origin} --token YOUR_KEY`)}
-<p class="mt-4"><a href="/account" class="btn btn-primary">Go to your account</a></p>
+<p class="mt-4 text-sm prose-muted">Log in once on this machine, then clone the workspace:</p>
+${cmdBlock(`memorize login ${origin}`)}
+${cmdBlock(`memorize clone ${origin}/clone/${result.storeId}`)}
+<p class="mt-3 text-sm prose-muted">Already have the project locally? Attach the remote instead:</p>
+${cmdBlock(`memorize remote ${origin}/clone/${result.storeId}`)}
+<p class="mt-4"><a href="/app" class="btn btn-primary">Open the app</a></p>
 ${copyScript()}`;
   sendHtml(res, 200, layout({ title: 'Memorize Hub — joined', body, user: session }), {
     'set-cookie': clearJoinCookie(),
   });
+}
+
+/**
+ * GET /clone/:storeId — human landing for a share URL. The memorize client reads
+ * the same URL itself (`memorize clone <url>` = origin as remote-url + last path
+ * segment as store id), so this page exists only for the person who pastes it
+ * into a browser. Member -> the copy-paste onboarding block; signed-out -> login
+ * and return here; non-member/unknown -> 404 (existence-leak policy, README §5).
+ * Pure guidance — no API behavior attaches to this route.
+ */
+export function handleClonePage(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: GatewayContext,
+  storeId: string,
+): void {
+  const { config, db } = ctx;
+  if (!sessionLoginEnabled(config)) {
+    sendHtml(res, 503, page('Accounts not configured', ''));
+    return;
+  }
+  const session = readAccount(req.headers.cookie, config.sessionSecret!);
+  if (!session) {
+    redirect(res, '/account/login', setReturnCookie(`/clone/${encodeURIComponent(storeId)}`));
+    return;
+  }
+  if (!memberRole(db, storeId, session.accountId)) {
+    sendHtml(res, 404, layout({
+      title: 'Memorize Hub — not found',
+      body: `<h1 class="text-2xl font-bold">Not found</h1>
+<p class="mt-2 prose-muted">No such project, or you are not a member. Ask an owner for an invite link.</p>`,
+      user: session,
+    }));
+    return;
+  }
+  const store = getStore(db, storeId);
+  const name = store?.name ? htmlEscape(store.name) : storeId;
+  const origin = originFor(req, config);
+  const cloneUrl = `${origin}/clone/${storeId}`;
+  const body = `<h1 class="text-2xl font-bold">Clone ${name}</h1>
+<p class="mt-2 prose-muted">Run these on the machine you want to sync
+ (<code class="font-mono">${htmlEscape(storeId)}</code>):</p>
+<div class="mt-4">
+${cmdBlock('npm i -g @shakystar/memorize')}
+${cmdBlock(`memorize login ${origin}`)}
+${cmdBlock(`memorize clone ${cloneUrl}`)}
+</div>
+<p class="mt-3 text-sm prose-muted">Already have the project locally? Attach the remote instead:</p>
+${cmdBlock(`memorize remote ${cloneUrl}`)}
+${copyScript()}`;
+  sendHtml(res, 200, layout({ title: `Memorize Hub — clone ${name}`, body, user: session }));
 }
 
 /* ----------------------------------------------------------------- helpers --- */
