@@ -29,16 +29,15 @@ const TABS: Array<{ id: Tab; label: string; tbd?: boolean }> = [
 ];
 
 /**
- * First landing: a real workspace has nothing to show until a machine syncs,
- * so it opens on Connect; example data (demo/dev mock) opens on Timeline to
- * show the product. `?tab=` still wins (Connect excluded in demo — the
- * commands would target a fake workspace).
+ * Timeline is the primary workspace landing, including the live product. `?tab=`
+ * still wins (Connect excluded in demo - the commands would target a fake
+ * workspace), and an empty live Timeline points users to Connect.
  */
-function initialTab(demo: boolean, example: boolean): Tab {
+function initialTab(demo: boolean): Tab {
   const wanted = new URLSearchParams(window.location.search).get('tab');
   if (wanted === 'connect') return demo ? 'timeline' : 'connect';
   if (TABS.some((t) => t.id === wanted)) return wanted as Tab;
-  return example ? 'timeline' : 'connect';
+  return 'timeline';
 }
 
 export function WorkspaceCanvas({
@@ -51,7 +50,7 @@ export function WorkspaceCanvas({
   demo?: boolean;
 }) {
   const example = MOCK_ENABLED || demo;
-  const [tab, setTab] = useState<Tab>(() => initialTab(Boolean(demo), Boolean(example)));
+  const [tab, setTab] = useState<Tab>(() => initialTab(Boolean(demo)));
   const [timeline, setTimeline] = useState<{
     items: TimelineItem[];
     loading: boolean;

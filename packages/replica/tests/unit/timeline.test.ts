@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { CURRENT_SCHEMA_VERSION } from '@shakystar/memorize/dist/domain/common.js';
 import type { DomainEvent } from '@shakystar/memorize/dist/domain/events.js';
 import { closeAll } from '@shakystar/memorize/dist/storage/db.js';
+import { readEvents } from '@shakystar/memorize/dist/storage/event-store.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { readTimeline } from '../../src/timeline.js';
@@ -73,6 +74,38 @@ function remoteEvents(storeId: string): DomainEvent[] {
         projectId: storeId,
         kind: 'decision',
         text: 'timeline reads the pulled projection',
+        salience: 8,
+        sourceObservationIds: [],
+        tags: ['timeline'],
+        importSource: 'hub-web',
+      },
+    },
+  ];
+}
+
+function remoteMemoryOnlyEvents(originProjectId: string): DomainEvent[] {
+  const memoryAt = '2026-07-03T00:01:00.000Z';
+  return [
+    {
+      id: 'evt_timeline_memory',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      createdAt: memoryAt,
+      updatedAt: memoryAt,
+      type: 'memory.consolidated',
+      projectId: originProjectId,
+      scopeType: 'project',
+      scopeId: originProjectId,
+      actor: 'user',
+      writer: ACC,
+      sourceProjectId: originProjectId,
+      payload: {
+        id: 'mem_timeline_decision',
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        createdAt: memoryAt,
+        updatedAt: memoryAt,
+        projectId: originProjectId,
+        kind: 'decision',
+        text: 'timeline reads a genesis-less workspace log',
         salience: 8,
         sourceObservationIds: [],
         tags: ['timeline'],
@@ -174,6 +207,47 @@ describe('readTimeline', () => {
     expect(second.pulled).toMatchObject({ total: 0, inserted: 0 });
     expect(second.items).toHaveLength(1);
     expect(pulls[1]!.url).toContain('since=evt_timeline_memory');
+  });
+
+  it('creates a local read-model project when the workspace log has no genesis', async () => {
+    const storeId = serverStoreId(WSP);
+    const originProjectId = 'proj_alice_origin';
+    const pulls: PullRequest[] = [];
+    const result = await readTimeline({
+      hubUrl: 'http://hub.fake',
+      apiKey: 'mzk_fake',
+      workspaceId: WSP,
+      fetchImpl: fakeHub(remoteMemoryOnlyEvents(originProjectId), pulls),
+    });
+
+    const localEvents = await readEvents(storeId);
+
+    expect(result.pulled).toMatchObject({ total: 1, inserted: 1 });
+    expect(localEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'project.created',
+          projectId: storeId,
+          sourceProjectId: storeId,
+          payload: expect.objectContaining({ id: storeId }),
+        }),
+      ]),
+    );
+    expect(result.items).toEqual([
+      {
+        id: 'mem_timeline_decision',
+        at: '2026-07-03T00:01:00.000Z',
+        type: 'memory.consolidated',
+        kind: 'decision',
+        text: 'timeline reads a genesis-less workspace log',
+        salience: 8,
+        member: ACC,
+        writer: ACC,
+        sourceProjectId: originProjectId,
+        sourceProjectLabel: originProjectId,
+        tags: ['timeline'],
+      },
+    ]);
   });
 
   it('validates the limit', async () => {
