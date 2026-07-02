@@ -14,6 +14,7 @@ missing in the single-file draft).
 |---|---|---|
 | [`transport.md`](./transport.md) | `POST/GET .../events`, `/healthz`, E2E envelope | relay (transport) |
 | [`store-resolution.md`](./store-resolution.md) | server-minted store ids, discovery overview | gateway (control) |
+| [`account.md`](./account.md) | `GET /v1/account` identity echo (whoami) | gateway (control) |
 | [`personal-store.md`](./personal-store.md) | `psm_` per-account personal memory | gateway (control) |
 | [`workspace.md`](./workspace.md) | `wsp_` create / invite / join / membership / roles | gateway (control) |
 | [`device-auth.md`](./device-auth.md) | `POST /v1/device/code` · `/device` · `POST /v1/device/token` (browser device login) | gateway (control) |

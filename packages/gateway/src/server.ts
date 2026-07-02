@@ -4,6 +4,7 @@ import {
   handleAccountKeyIssue,
   handleAccountKeyRevoke,
   handleAccountKeysList,
+  handleAccountWhoami,
 } from './account-api.js';
 import { handleAsset, isAssetPath } from './assets.js';
 import type { GatewayContext } from './context.js';
@@ -104,6 +105,7 @@ async function route(
   if (method === 'POST' && p === '/v1/device/token') return handleDeviceToken(req, res, ctx);
 
   // --- account discovery (API key) --------------------------------------
+  if (method === 'GET' && p === '/v1/account') return handleAccountWhoami(req, res, ctx);
   if (method === 'GET' && p === '/v1/account/personal-store') return handlePersonalStore(req, res, ctx);
   if (method === 'GET' && p === '/v1/account/workspaces') return listWorkspaces(req, res, ctx);
   if (method === 'GET' && p === '/v1/account/keys') return handleAccountKeysList(req, res, ctx);

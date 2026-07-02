@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import { getAccount } from './accounts.js';
 import type { GatewayContext } from './context.js';
 import { readBody, sendError, sendJson } from './http.js';
 import { issueApiKey, listAccountTokens, revokeToken, tokenBelongsToAccount } from './keys.js';
@@ -43,6 +44,32 @@ function accountPrincipal(
     return null;
   }
   return p;
+}
+
+/**
+ * GET /v1/account identity echo (whoami). Unlike the management routes below
+ * this admits EVERY principal, scoped and read-only included: it discloses only
+ * the identity the caller already authenticates as, and data-plane callers need
+ * it. The H060 replica authors events with the calling USER's account as the
+ * provenance `writer`, and the user may only hold a scoped key.
+ */
+export function handleAccountWhoami(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: GatewayContext,
+): void {
+  const p = resolvePrincipal(ctx, req);
+  if (!p) return sendError(res, 401, 'authentication required');
+  const account = getAccount(ctx.db, p.accountId);
+  // A key whose account row vanished is a dead credential, not a caller.
+  if (!account) return sendError(res, 401, 'authentication required');
+  sendJson(res, 200, {
+    accountId: p.accountId,
+    email: account.email,
+    via: p.via,
+    readOnly: p.readOnly,
+    scoped: p.scoped,
+  });
 }
 
 /** GET /v1/account/keys — the account's keys (active + revoked; UI hides revoked). */
