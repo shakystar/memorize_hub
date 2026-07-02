@@ -7,7 +7,7 @@
  */
 
 import type { Me, Workspace } from './api';
-import type { TimelineItem } from './domain';
+import type { KnowledgeEntry, TimelineItem } from './domain';
 
 export const MOCK_ENABLED = import.meta.env.DEV;
 
@@ -102,4 +102,55 @@ export const MOCK_TIMELINE: TimelineItem[] = [
     salience: 5, tags: ['analytics'], ...myApp,
   },
   { id: 'evt_14', at: at(2, 9, 30), type: 'session.started', agent: 'claude-code', ...kant },
+];
+
+/** The same team's consolidated knowledge: every kind, shared tags, one superseded, one retracted. */
+export const MOCK_KNOWLEDGE: KnowledgeEntry[] = [
+  {
+    id: 'mem_01', at: at(1, 17, 2), kind: 'decision', salience: 9, tags: ['pricing'],
+    text: 'Pricing page ships with three tiers; the enterprise tier is contact-only until quota enforcement lands.',
+    ...myApp,
+  },
+  {
+    id: 'mem_02', at: at(1, 17, 30), kind: 'decision', salience: 8, tags: ['schedule'],
+    text: 'Launch date moves to the 15th — payment-provider review needs the buffer.',
+    ...kant,
+  },
+  {
+    id: 'mem_03', at: at(5, 11, 0), kind: 'decision', salience: 7, tags: ['brand'],
+    text: 'Landing pages use illustrations, not photography, to match the brand guide.',
+    superseded: { at: at(0, 9, 5), note: 'A/B test reversed this — photo variant won.' },
+    ...mina,
+  },
+  {
+    id: 'mem_04', at: at(0, 9, 5), kind: 'rationale', salience: 8, tags: ['brand', 'a-b-test'],
+    text: 'Hero image A/B: photo variant beat illustration on every segment, so the brand guide drops the illustration rule for landing pages.',
+    ...mina,
+  },
+  {
+    id: 'mem_05', at: at(3, 16, 20), kind: 'rationale', salience: 6, tags: ['pricing'],
+    text: 'Three tiers instead of four: user interviews showed the second mid tier read as filler and slowed the choice.',
+    ...myApp,
+  },
+  {
+    id: 'mem_06', at: at(0, 10, 12), kind: 'progress', salience: 6, tags: ['copy', 'checkout'],
+    text: 'Checkout flow copy finalized; legal approved the refund wording.',
+    ...myApp,
+  },
+  {
+    id: 'mem_07', at: at(2, 18, 20), kind: 'progress', salience: 5, tags: ['analytics'],
+    text: 'Signup funnel instrumented end to end; drop-off dashboards live.',
+    ...myApp,
+  },
+  {
+    id: 'mem_08', at: at(4, 14, 45), kind: 'progress', salience: 4, tags: ['checkout'],
+    text: 'Old note that the beta waitlist gates signups — the gate was removed.',
+    retracted: { at: at(1, 13, 10) },
+    ...myWeb,
+  },
+  {
+    id: 'mem_09', at: at(6, 10, 30), kind: 'decision', salience: 6, tags: ['copy'],
+    text: 'Product name is written "Memorize Hub" — capitalized, two words — everywhere user-facing.',
+    ...kant,
+  },
 ];

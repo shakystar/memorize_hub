@@ -1,8 +1,9 @@
 import { type ReactNode, useState } from 'react';
 
+import { KnowledgeTab } from '@/components/canvas/KnowledgeTab';
 import { TimelineTab } from '@/components/canvas/TimelineTab';
 import { cn } from '@/lib/utils';
-import { MOCK_ENABLED, MOCK_TIMELINE } from '@/lib/mock';
+import { MOCK_ENABLED, MOCK_KNOWLEDGE, MOCK_TIMELINE } from '@/lib/mock';
 
 /**
  * The workspace main canvas: a tab bar over the memory views
@@ -21,8 +22,13 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'decisions', label: 'Decisions' },
 ];
 
+function initialTab(): Tab {
+  const wanted = new URLSearchParams(window.location.search).get('tab');
+  return TABS.some((t) => t.id === wanted) ? (wanted as Tab) : 'timeline';
+}
+
 export function WorkspaceCanvas({ meEmail }: { meEmail: string }) {
-  const [tab, setTab] = useState<Tab>('timeline');
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -53,10 +59,16 @@ export function WorkspaceCanvas({ meEmail }: { meEmail: string }) {
           />
         )}
         {tab === 'knowledge' && (
-          <ComingSoon title="Knowledge">
-            Everything this workspace has learned, as a living document — decisions, the why behind
-            them, and progress, grouped by topic and sorted by importance.
-          </ComingSoon>
+          <KnowledgeTab
+            entries={MOCK_ENABLED ? MOCK_KNOWLEDGE : []}
+            mock={MOCK_ENABLED}
+            emptyState={
+              <ComingSoon title="Knowledge">
+                Everything this workspace has learned, as a living document — decisions, the why
+                behind them, and progress, grouped by topic and sorted by importance.
+              </ComingSoon>
+            }
+          />
         )}
         {tab === 'tasks' && (
           <ComingSoon title="Tasks">
