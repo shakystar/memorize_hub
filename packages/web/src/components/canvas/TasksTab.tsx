@@ -40,8 +40,8 @@ export function TasksTab({
 
   return (
     <div className="flex min-h-full items-stretch">
-      <div className="min-w-0 flex-1 px-6 py-4">
-        <div className="flex flex-wrap items-center gap-1.5 pb-4">
+      <div className="min-w-0 flex-1 px-6 pb-4">
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1.5 bg-background pb-4 pt-4">
           {badge && (
             <span className="rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground">
               {badge}
