@@ -1,9 +1,13 @@
 /**
- * Dev-only mock data for the memory canvas. The read-surface (headless
- * replica, H060) does not exist yet; this lets the canvas UI be designed and
- * reviewed against realistic domain-shaped data without it. Never active in a
- * production build (`import.meta.env.DEV` guard), and the UI badges mocked
- * content as such — live pages keep the honest "in development" empty states.
+ * Example data for the memory canvas, serving two roles:
+ *
+ * 1. Dev mock (`MOCK_ENABLED`, `import.meta.env.DEV`): design/review the
+ *    canvas before the read surface (headless replica, H060) exists.
+ * 2. Anonymous demo: signed-out visitors get this as a badged "Example
+ *    workspace" instead of a login wall — the product is the landing page.
+ *    This is the one sanctioned way example data ships in a production
+ *    build; it must always be visibly badged, and signed-in live pages keep
+ *    the honest "in development" empty states.
  */
 
 import type { Me, Workspace } from './api';

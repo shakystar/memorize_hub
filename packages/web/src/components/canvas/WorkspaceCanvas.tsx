@@ -7,20 +7,21 @@ import { MOCK_ENABLED, MOCK_TASKS, MOCK_TIMELINE } from '@/lib/mock';
 
 /**
  * The workspace main canvas: a tab bar over the memory views
- * (docs/design/workspace-canvas-features.md §3). Timeline is the primary
- * axis; the other tabs are [replica]-layer and stay honest "in development"
- * placeholders until the read surface (H060) exists. In dev the timeline
- * renders badged mock data so the design can be reviewed now.
+ * (docs/design/workspace-canvas-features.md §3). Launch tabs (Timeline,
+ * Tasks) come first; the TBD group stays left-aligned behind a divider as
+ * honest "in development" placeholders until the read surface (H060)
+ * exists. Example data renders in dev (design review) and in anonymous
+ * demo mode (the landing experience) — always badged, never silent.
  */
 
 type Tab = 'timeline' | 'knowledge' | 'tasks' | 'decisions' | 'sources';
 
-const TABS: Array<{ id: Tab; label: string }> = [
+const TABS: Array<{ id: Tab; label: string; tbd?: boolean }> = [
   { id: 'timeline', label: 'Timeline' },
-  { id: 'knowledge', label: 'Knowledge' },
   { id: 'tasks', label: 'Tasks' },
-  { id: 'decisions', label: 'Decisions' },
-  { id: 'sources', label: 'Sources' },
+  { id: 'knowledge', label: 'Knowledge', tbd: true },
+  { id: 'decisions', label: 'Decisions', tbd: true },
+  { id: 'sources', label: 'Sources', tbd: true },
 ];
 
 function initialTab(): Tab {
@@ -28,34 +29,43 @@ function initialTab(): Tab {
   return TABS.some((t) => t.id === wanted) ? (wanted as Tab) : 'timeline';
 }
 
-export function WorkspaceCanvas({ meEmail }: { meEmail: string }) {
+export function WorkspaceCanvas({ meEmail, demo }: { meEmail: string; demo?: boolean }) {
   const [tab, setTab] = useState<Tab>(initialTab);
+  const example = MOCK_ENABLED || demo;
+  const badge = demo ? 'Example data' : MOCK_ENABLED ? 'Mock data — dev only' : undefined;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <nav className="flex gap-1 border-b border-border px-6">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm',
-              tab === t.id
-                ? 'border-primary font-medium text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t.label}
-          </button>
+      <nav className="flex items-stretch gap-1 border-b border-border px-6">
+        {TABS.map((t, i) => (
+          <span key={t.id} className="flex items-stretch gap-1">
+            {t.tbd && !TABS[i - 1]?.tbd && <span className="my-2 mx-1 w-px bg-border" />}
+            <button
+              onClick={() => setTab(t.id)}
+              className={cn(
+                '-mb-px flex items-center gap-1 border-b-2 px-3 py-2 text-sm',
+                tab === t.id
+                  ? 'border-primary font-medium text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {t.label}
+              {t.tbd && (
+                <span className="rounded-sm border border-border px-1 text-[10px] text-muted-foreground">
+                  TBD
+                </span>
+              )}
+            </button>
+          </span>
         ))}
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {tab === 'timeline' && (
           <TimelineTab
-            items={MOCK_ENABLED ? MOCK_TIMELINE : []}
+            items={example ? MOCK_TIMELINE : []}
             meEmail={meEmail}
-            mock={MOCK_ENABLED}
+            badge={badge}
             emptyState={<TimelineEmptyState />}
           />
         )}
@@ -67,8 +77,8 @@ export function WorkspaceCanvas({ meEmail }: { meEmail: string }) {
         )}
         {tab === 'tasks' && (
           <TasksTab
-            tasks={MOCK_ENABLED ? MOCK_TASKS : []}
-            mock={MOCK_ENABLED}
+            tasks={example ? MOCK_TASKS : []}
+            badge={badge}
             emptyState={
               <ComingSoon title="Tasks">
                 The workspace&apos;s tasks and handoffs — what agents are working on, what is ready

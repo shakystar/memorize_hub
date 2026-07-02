@@ -15,12 +15,12 @@ import type { Priority, TaskEntry, TaskStatus } from '@/lib/domain';
  */
 export function TasksTab({
   tasks,
-  mock,
+  badge,
   emptyState,
 }: {
   tasks: TaskEntry[];
-  /** True when dev-only mock data — always badged, never silent. */
-  mock?: boolean;
+  /** Set when the board is example data (dev mock / anonymous demo) — always badged, never silent. */
+  badge?: string;
   emptyState: ReactNode;
 }) {
   const [view, setView] = useState<'board' | 'list'>('board');
@@ -42,9 +42,9 @@ export function TasksTab({
     <div className="flex min-h-full items-stretch">
       <div className="min-w-0 flex-1 px-6 py-4">
         <div className="flex flex-wrap items-center gap-1.5 pb-4">
-          {mock && (
+          {badge && (
             <span className="rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground">
-              Mock data — dev only
+              {badge}
             </span>
           )}
           <span className="flex overflow-hidden rounded-md border border-border text-xs">

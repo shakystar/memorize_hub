@@ -13,14 +13,14 @@ import type { DomainTimelineItem, TimelineItem } from '@/lib/domain';
 export function TimelineTab({
   items,
   meEmail,
-  mock,
+  badge,
   emptyState,
 }: {
   items: TimelineItem[];
   /** The signed-in member — their items render on the right, unnamed. */
   meEmail: string;
-  /** True when the feed is dev-only mock data — always badged, never silent. */
-  mock?: boolean;
+  /** Set when the feed is example data (dev mock / anonymous demo) — always badged, never silent. */
+  badge?: string;
   emptyState: ReactNode;
 }) {
   const [member, setMember] = useState<string | null>(null);
@@ -39,9 +39,9 @@ export function TimelineTab({
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col px-6 py-4">
       <div className="flex flex-wrap items-center gap-1.5 pb-4">
-        {mock && (
+        {badge && (
           <span className="rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground">
-            Mock data — dev only
+            {badge}
           </span>
         )}
         <MemberChip label="Everyone" active={member === null} onClick={() => setMember(null)} />
