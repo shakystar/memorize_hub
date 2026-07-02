@@ -128,9 +128,14 @@ The same capability is reachable two ways, and both are first-class:
 - **CLI / agent** holds an **API key** (`via: "key"`) and drives every route as
   JSON over HTTPS.
 - **Browser** holds an **OAuth session** (`via: "session"`) for `/account`,
-  `/admin`, and the **`/join?token=…` invite landing** — the human-facing
+  `/admin`, the **`/join?token=…` invite landing** — the human-facing
   redeem path that wraps the same join capability as
-  `POST /v1/workspaces/join` (see [`workspace.md`](./workspace.md)).
+  `POST /v1/workspaces/join` (see [`workspace.md`](./workspace.md)) — and the
+  **`/clone/:storeId` share landing**, a pure guidance page for a share URL
+  pasted into a browser (the CLI parses the same URL itself: origin =
+  remote-url, last path segment = store id). Member -> onboarding commands;
+  signed-out -> login; non-member/unknown -> `404` (§5). No API behavior
+  attaches to it.
 
 ### 7. Planes stay separate (Hub SoT [[H010]])
 
