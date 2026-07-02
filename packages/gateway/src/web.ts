@@ -122,6 +122,7 @@ export function handleLanding(req: IncomingMessage, res: ServerResponse, ctx: Ga
  ${cmdBlock('npm i -g @shakystar/memorize')}
  ${cmdBlock(`memorize login ${origin}`)}
  ${cmdBlock(`memorize clone ${origin}/clone/PROJECT_ID`)}
+ <p class="mt-2 text-sm prose-muted">From there, sync runs automatically at session boundaries.</p>
 </section>
 
 <section class="mt-14 grid gap-4 sm:grid-cols-3">
@@ -196,13 +197,16 @@ ${cmdBlock('npm i -g @shakystar/memorize')}
 ${cmdBlock(`memorize login ${o}`)}
 <h2 class="${H2}">3. Clone the project</h2>
 <p class="${P}">Every workspace shows its clone URL in the
- <a href="/app" class="text-accent hover:underline">dashboard</a>. Use
- <code class="font-mono">clone</code>, not <code class="font-mono">init</code> —
- <code class="font-mono">init</code> forks a new empty project that will not sync.</p>
+ <a href="/app" class="text-accent hover:underline">dashboard</a>.
+ <code class="font-mono">clone</code> stores the remote and pulls once — use it, not
+ <code class="font-mono">init</code>, which forks a new empty project that will not sync.</p>
 ${cmdBlock(`memorize clone ${o}/clone/PROJECT_ID`)}
 <h2 class="${H2}">Already have the project locally?</h2>
-<p class="${P}">Attach the remote instead of cloning; sync then needs no flags.</p>
-${cmdBlock(`memorize remote ${o}/clone/PROJECT_ID`)}`,
+<p class="${P}">Run steps 1–2, then attach the remote instead of cloning — it pushes and pulls
+ once right away.</p>
+${cmdBlock(`memorize remote ${o}/clone/PROJECT_ID`)}
+<p class="mt-6 text-sm prose-muted">That's it. After connecting, sync runs automatically at
+ session boundaries — no manual sync in day-to-day use.</p>`,
   },
   {
     slug: 'workspaces',
@@ -240,6 +244,27 @@ ${cmdBlock(`memorize remote ${o}/clone/PROJECT_ID`)}`,
  <strong class="text-fg">read-only</strong> (pull, never push or mutate) and <strong class="text-fg">scope</strong>
  (a data-plane-only key limited to specific workspaces). An unscoped key syncs personal memory and every
  workspace you belong to; a scoped key reaches neither personal memory nor account management.</p>`,
+  },
+  {
+    slug: 'commands',
+    title: 'Commands',
+    section: 'Reference',
+    render: (o) => `<h1 class="${H1}">Commands</h1>
+<p class="${P}">The Hub-facing memorize commands. The full CLI is documented in the
+ <a href="https://github.com/shakystar/memorize" class="text-accent hover:underline">memorize README</a>.</p>
+<h2 class="${H2}">memorize login</h2>
+<p class="${P}">Connect a machine to a Hub — opens your browser to approve the device.</p>
+${cmdBlock(`memorize login ${o}`)}
+<h2 class="${H2}">memorize clone</h2>
+<p class="${P}">Copy a project from its share URL: stores the remote and does the first pull.</p>
+${cmdBlock(`memorize clone ${o}/clone/PROJECT_ID`)}
+<h2 class="${H2}">memorize remote</h2>
+<p class="${P}">Attach a remote to a project you already have locally, then push and pull once.</p>
+${cmdBlock(`memorize remote ${o}/clone/PROJECT_ID`)}
+<h2 class="${H2}">Manual sync</h2>
+<p class="${P}">After connecting, sync runs automatically at session boundaries — there is no
+ shortcut alias. To force a pass:</p>
+${cmdBlock('memorize project sync --push --pull')}`,
   },
 ];
 
@@ -800,11 +825,15 @@ export function handleJoinPage(
   const body = `<h1 class="text-2xl font-bold">Workspace joined</h1>
 <p class="mt-2 prose-muted">${verb} <strong class="text-fg">${name}</strong>
  (<code class="font-mono">${htmlEscape(result.storeId)}</code>).</p>
-<p class="mt-4 text-sm prose-muted">Log in once on this machine, then clone the workspace:</p>
+<p class="mt-4 text-sm prose-muted">Join from a new machine:</p>
+${cmdBlock('npm i -g @shakystar/memorize')}
 ${cmdBlock(`memorize login ${origin}`)}
 ${cmdBlock(`memorize clone ${origin}/clone/${result.storeId}`)}
-<p class="mt-3 text-sm prose-muted">Already have the project locally? Attach the remote instead:</p>
+<p class="mt-3 text-sm prose-muted">Already have the project locally?</p>
+${cmdBlock('npm i -g @shakystar/memorize')}
+${cmdBlock(`memorize login ${origin}`)}
 ${cmdBlock(`memorize remote ${origin}/clone/${result.storeId}`)}
+<p class="mt-3 text-sm prose-muted">After connecting, sync runs automatically at session boundaries.</p>
 <p class="mt-4"><a href="/app" class="btn btn-primary">Open the app</a></p>
 ${copyScript()}`;
   sendHtml(res, 200, layout({ title: 'Memorize Hub — joined', body, user: session }), {
@@ -857,8 +886,11 @@ ${cmdBlock('npm i -g @shakystar/memorize')}
 ${cmdBlock(`memorize login ${origin}`)}
 ${cmdBlock(`memorize clone ${cloneUrl}`)}
 </div>
-<p class="mt-3 text-sm prose-muted">Already have the project locally? Attach the remote instead:</p>
+<p class="mt-3 text-sm prose-muted">Already have the project locally?</p>
+${cmdBlock('npm i -g @shakystar/memorize')}
+${cmdBlock(`memorize login ${origin}`)}
 ${cmdBlock(`memorize remote ${cloneUrl}`)}
+<p class="mt-3 text-sm prose-muted">After connecting, sync runs automatically at session boundaries.</p>
 ${copyScript()}`;
   sendHtml(res, 200, layout({ title: `Memorize Hub — clone ${name}`, body, user: session }));
 }

@@ -65,6 +65,9 @@ describe('share landing (/clone/:storeId)', () => {
     expect(html).toContain(`memorize clone https://hub.example/clone/${storeId}`);
     expect(html).toContain(`memorize remote https://hub.example/clone/${storeId}`);
     expect(html).toContain('demo'); // the workspace name headlines the page
+    // No manual sync in onboarding copy — connecting is enough (auto-sync note instead).
+    expect(html).not.toContain('memorize project sync');
+    expect(html).toContain('sync runs automatically at session boundaries');
   });
 
   it('404s a signed-in non-member (no existence leak)', async () => {
