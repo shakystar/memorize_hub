@@ -29,6 +29,7 @@ const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const HUB_ROOT = resolve(PKG_ROOT, '..', '..');
 const RELAY_DIST = join(HUB_ROOT, 'packages', 'relay', 'dist', 'index.js');
 const GATEWAY_DIST = join(HUB_ROOT, 'packages', 'gateway', 'dist', 'index.js');
+const REPLICA_DIST = join(PKG_ROOT, 'dist', 'index.js');
 const REPLICA_CLI = join(PKG_ROOT, 'dist', 'cli.js');
 const MEMORIZE_CLI =
   process.env.MEMORIZE_CLI ??
@@ -129,8 +130,10 @@ const aliceKey = issueApiKey(db, aliceAccount, 'alice-e2e').plaintext;
 db.close();
 
 const relayPort = await freePort();
+const replicaPort = await freePort();
 const gwPort = await freePort();
 const relayUrl = `http://127.0.0.1:${relayPort}`;
+const replicaUrl = `http://127.0.0.1:${replicaPort}`;
 const gwUrl = `http://127.0.0.1:${gwPort}`;
 
 const relay: ChildProcess = spawn(process.execPath, [RELAY_DIST], {
@@ -142,6 +145,16 @@ const relay: ChildProcess = spawn(process.execPath, [RELAY_DIST], {
   },
   stdio: ['ignore', 'inherit', 'inherit'],
 });
+const replica: ChildProcess = spawn(process.execPath, [REPLICA_DIST], {
+  env: {
+    ...process.env,
+    REPLICA_PORT: String(replicaPort),
+    REPLICA_RELAY_URL: relayUrl,
+    RELAY_INTERNAL_TOKEN: RELAY_TOKEN,
+    MEMORIZE_ROOT: timelineRoot,
+  },
+  stdio: ['ignore', 'inherit', 'inherit'],
+});
 const gateway: ChildProcess = spawn(process.execPath, [GATEWAY_DIST], {
   env: {
     ...process.env,
@@ -149,14 +162,16 @@ const gateway: ChildProcess = spawn(process.execPath, [GATEWAY_DIST], {
     GATEWAY_DB: gatewayDb,
     RELAY_URL: relayUrl,
     RELAY_INTERNAL_TOKEN: RELAY_TOKEN,
+    REPLICA_URL: replicaUrl,
   },
   stdio: ['ignore', 'inherit', 'inherit'],
 });
 
 try {
   await waitFor(`${relayUrl}/healthz`, { authorization: `Bearer ${RELAY_TOKEN}` }, 'relay');
+  await waitFor(`${replicaUrl}/healthz`, {}, 'replica');
   await waitFor(`${gwUrl}/healthz`, {}, 'gateway');
-  console.log(`relay ${relayUrl}, gateway ${gwUrl}\n`);
+  console.log(`relay ${relayUrl}, replica ${replicaUrl}, gateway ${gwUrl}\n`);
 
   await cli(userHome, userProj, 'project', 'init');
   await cli(userHome, userProj, 'auth', 'login', '--remote-url', gwUrl, '--token', aliceKey);
@@ -198,27 +213,17 @@ try {
   );
   check('events were accepted by the Hub', result.accepted >= 1, String(result.accepted));
 
-  const timelineRead = await run(
-    process.execPath,
-    [
-      REPLICA_CLI,
-      'timeline',
-      '--hub',
-      gwUrl,
-      '--workspace',
-      created.workspaceId,
-      '--limit',
-      '10',
-    ],
-    { cwd: PKG_ROOT, env: { MEMORIZE_ROOT: timelineRoot, HUB_API_KEY: aliceKey } },
-  );
+  const timelineRes = await fetch(`${gwUrl}/v1/workspaces/${created.workspaceId}/timeline?limit=10`, {
+    headers: { authorization: `Bearer ${aliceKey}` },
+  });
+  const timelineText = await timelineRes.text();
   check(
-    'timeline replica pulls + projects the workspace',
-    timelineRead.code === 0,
-    timelineRead.stdout + timelineRead.stderr,
+    'gateway timeline endpoint pulls through the replica',
+    timelineRes.status === 200,
+    `${timelineRes.status} ${timelineText}`,
   );
-  const timeline = timelineRead.code === 0
-    ? (JSON.parse(timelineRead.stdout) as {
+  const timeline = timelineRes.status === 200
+    ? (JSON.parse(timelineText) as {
         pulled: { inserted: number };
         items: Array<{
           text: string;
@@ -232,13 +237,13 @@ try {
   check('timeline pull inserted remote events', timeline.pulled.inserted >= 1, String(timeline.pulled.inserted));
   check('timeline contains the web-authored memory', Boolean(timelineItem));
   check(
-    'timeline item carries writer provenance',
-    timelineItem?.writer === aliceAccount,
+    'timeline item carries writer email',
+    timelineItem?.writer === 'alice@replica.e2e',
     JSON.stringify({ writer: timelineItem?.writer }),
   );
   check(
-    'timeline item is grouped by the author account',
-    timelineItem?.member === aliceAccount,
+    'timeline item is grouped by the author email',
+    timelineItem?.member === 'alice@replica.e2e',
     JSON.stringify({ member: timelineItem?.member }),
   );
   check(
@@ -246,6 +251,34 @@ try {
     timelineItem?.sourceProjectId === result.storeId,
     JSON.stringify({ sourceProjectId: timelineItem?.sourceProjectId, expected: result.storeId }),
   );
+
+  const timelineCli = await run(
+    process.execPath,
+    [
+      REPLICA_CLI,
+      'timeline',
+      '--hub',
+      relayUrl,
+      '--workspace',
+      created.workspaceId,
+      '--limit',
+      '10',
+    ],
+    { cwd: PKG_ROOT, env: { MEMORIZE_ROOT: join(sandbox, 'timeline-cli-root'), HUB_API_KEY: RELAY_TOKEN } },
+  );
+  check('timeline CLI still reads the internal relay directly', timelineCli.code === 0, timelineCli.stdout + timelineCli.stderr);
+  const timelineCliBody = timelineCli.code === 0
+    ? (JSON.parse(timelineCli.stdout) as {
+        pulled: { inserted: number };
+        items: Array<{
+          text: string;
+          writer?: string;
+          member: string;
+          sourceProjectId?: string;
+        }>;
+      })
+    : { pulled: { inserted: 0 }, items: [] };
+  check('timeline CLI returns the authored memory', timelineCliBody.items.some((item) => item.text.includes('ship the replica')));
 
   const pull = await cli(userHome, userProj, 'project', 'sync', '--pull');
   check('user pulls new events', /\([1-9]\d* new/.test(pull), pull);
@@ -286,7 +319,8 @@ try {
   process.exitCode = failures === 0 ? 0 : 1;
 } finally {
   relay.kill();
+  replica.kill();
   gateway.kill();
-  await Promise.allSettled([once(relay, 'exit'), once(gateway, 'exit')]);
+  await Promise.allSettled([once(relay, 'exit'), once(replica, 'exit'), once(gateway, 'exit')]);
   await rm(sandbox, { recursive: true, force: true }).catch(() => {});
 }

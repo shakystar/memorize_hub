@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 import { ConnectTab } from '@/components/canvas/ConnectTab';
 import { TasksTab } from '@/components/canvas/TasksTab';
@@ -6,6 +6,8 @@ import { TimelineTab } from '@/components/canvas/TimelineTab';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MOCK_ENABLED, MOCK_TASKS, MOCK_TIMELINE } from '@/lib/mock';
+import { getWorkspaceTimeline } from '@/lib/api';
+import type { TimelineItem } from '@/lib/domain';
 
 /**
  * The workspace main canvas: a tab bar over the memory views
@@ -50,7 +52,37 @@ export function WorkspaceCanvas({
 }) {
   const example = MOCK_ENABLED || demo;
   const [tab, setTab] = useState<Tab>(() => initialTab(Boolean(demo), Boolean(example)));
-  const badge = demo ? 'Example data' : MOCK_ENABLED ? 'Mock data — dev only' : undefined;
+  const [timeline, setTimeline] = useState<{
+    items: TimelineItem[];
+    loading: boolean;
+    error?: string;
+  }>({ items: [], loading: false });
+  const badge = demo ? 'Example data' : MOCK_ENABLED ? 'Mock data - dev only' : undefined;
+
+  useEffect(() => {
+    if (example) {
+      setTimeline({ items: [], loading: false });
+      return;
+    }
+    let cancelled = false;
+    setTimeline((current) => ({ items: current.items, loading: true }));
+    getWorkspaceTimeline(workspaceId)
+      .then((result) => {
+        if (!cancelled) setTimeline({ items: result.items, loading: false });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setTimeline({
+            items: [],
+            loading: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [example, workspaceId]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -95,10 +127,18 @@ export function WorkspaceCanvas({
         {tab === 'connect' && !demo && <ConnectTab workspaceId={workspaceId} />}
         {tab === 'timeline' && (
           <TimelineTab
-            items={example ? MOCK_TIMELINE : []}
+            items={example ? MOCK_TIMELINE : timeline.items}
             meEmail={meEmail}
             badge={badge}
-            emptyState={<TimelineEmptyState onConnect={() => setTab('connect')} />}
+            emptyState={
+              !example && timeline.loading ? (
+                <TimelineStatus title="Loading timeline" />
+              ) : !example && timeline.error ? (
+                <TimelineStatus title="Timeline unavailable" detail={timeline.error} />
+              ) : (
+                <TimelineEmptyState onConnect={() => setTab('connect')} />
+              )
+            }
           />
         )}
         {tab === 'talk' && (
@@ -155,6 +195,17 @@ function TimelineEmptyState({ onConnect }: { onConnect: () => void }) {
         <Button size="sm" className="mt-4" onClick={onConnect}>
           Connect a machine
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function TimelineStatus({ title, detail }: { title: string; detail?: string }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
+      <div className="max-w-md rounded-lg border border-dashed border-border p-8 text-center">
+        <p className="text-sm font-medium">{title}</p>
+        {detail && <p className="mt-2 text-sm text-muted-foreground">{detail}</p>}
       </div>
     </div>
   );
