@@ -7,7 +7,7 @@
  */
 
 import type { Me, Workspace } from './api';
-import type { TimelineItem } from './domain';
+import type { TaskEntry, TimelineItem } from './domain';
 
 export const MOCK_ENABLED = import.meta.env.DEV;
 
@@ -102,4 +102,58 @@ export const MOCK_TIMELINE: TimelineItem[] = [
     salience: 5, tags: ['analytics'], ...myApp,
   },
   { id: 'evt_14', at: at(2, 9, 30), type: 'session.started', agent: 'claude-code', ...kant },
+];
+
+/** The same team's task board: every visible status, handoffs with next actions. */
+export const MOCK_TASKS: TaskEntry[] = [
+  {
+    id: 'task_01', at: at(0, 9, 40), status: 'handoff_ready', priority: 'high',
+    title: 'Prepare launch-day social assets', ownerType: 'agent',
+    handoff: {
+      summary: 'All static assets exported; the animated teaser is storyboarded but not rendered.',
+      nextAction: 'Render the teaser from the storyboard and drop it in the shared folder.',
+    },
+    ...mina,
+  },
+  {
+    id: 'task_02', at: at(1, 15, 20), status: 'handoff_ready', priority: 'medium',
+    title: 'Landing hero implementation', ownerType: 'agent',
+    handoff: {
+      summary: 'Hero layout matches the winning A/B variant; copy is placeholder.',
+      nextAction: 'Swap in the final headline once legal clears it, then close.',
+    },
+    ...kant,
+  },
+  {
+    id: 'task_03', at: at(0, 10, 5), status: 'in_progress', priority: 'high',
+    title: 'Wire pricing page to billing', ownerType: 'agent', ...myApp,
+  },
+  {
+    id: 'task_04', at: at(0, 11, 30), status: 'in_progress', priority: 'medium',
+    title: 'Draft launch announcement email', ownerType: 'human', ...mina,
+  },
+  {
+    id: 'task_05', at: at(1, 9, 0), status: 'todo', priority: 'medium',
+    title: 'Set up status page for launch week', ownerType: 'unassigned', ...myWeb,
+  },
+  {
+    id: 'task_06', at: at(2, 14, 0), status: 'todo', priority: 'low',
+    title: 'Collect testimonial quotes from beta users', ownerType: 'unassigned', ...kant,
+  },
+  {
+    id: 'task_07', at: at(1, 16, 45), status: 'blocked', priority: 'high',
+    title: 'Enable live payments', ownerType: 'agent', ...myApp,
+  },
+  {
+    id: 'task_08', at: at(1, 17, 0), status: 'done', priority: 'high',
+    title: 'Finalize checkout flow copy', ownerType: 'agent', ...myApp,
+  },
+  {
+    id: 'task_09', at: at(2, 18, 30), status: 'done', priority: 'medium',
+    title: 'Instrument the signup funnel', ownerType: 'agent', ...myApp,
+  },
+  {
+    id: 'task_10', at: at(3, 12, 0), status: 'cancelled', priority: 'low',
+    title: 'Beta waitlist gate for signups', ownerType: 'agent', ...myWeb,
+  },
 ];

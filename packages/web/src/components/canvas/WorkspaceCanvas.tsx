@@ -1,8 +1,9 @@
 import { type ReactNode, useState } from 'react';
 
+import { TasksTab } from '@/components/canvas/TasksTab';
 import { TimelineTab } from '@/components/canvas/TimelineTab';
 import { cn } from '@/lib/utils';
-import { MOCK_ENABLED, MOCK_TIMELINE } from '@/lib/mock';
+import { MOCK_ENABLED, MOCK_TASKS, MOCK_TIMELINE } from '@/lib/mock';
 
 /**
  * The workspace main canvas: a tab bar over the memory views
@@ -65,10 +66,16 @@ export function WorkspaceCanvas({ meEmail }: { meEmail: string }) {
           </ComingSoon>
         )}
         {tab === 'tasks' && (
-          <ComingSoon title="Tasks">
-            The workspace&apos;s tasks and handoffs — what agents are working on, what is ready to
-            hand over, and what got done.
-          </ComingSoon>
+          <TasksTab
+            tasks={MOCK_ENABLED ? MOCK_TASKS : []}
+            mock={MOCK_ENABLED}
+            emptyState={
+              <ComingSoon title="Tasks">
+                The workspace&apos;s tasks and handoffs — what agents are working on, what is ready
+                to hand over, and what got done.
+              </ComingSoon>
+            }
+          />
         )}
         {tab === 'decisions' && (
           <ComingSoon title="Decisions">
