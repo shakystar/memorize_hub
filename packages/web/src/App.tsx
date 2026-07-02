@@ -3,6 +3,7 @@ import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
 import { AccountSettings } from '@/components/AccountSettings';
 import { WorkspaceCanvas } from '@/components/canvas/WorkspaceCanvas';
+import { ConnectPopover } from '@/components/ConnectPopover';
 import { NewWorkspaceDialog } from '@/components/NewWorkspaceDialog';
 import { SharePopover } from '@/components/SharePopover';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
@@ -190,6 +191,7 @@ function WorkspaceView({
             </a>
           ) : (
             <>
+              <ConnectPopover workspaceId={workspace.workspaceId} />
               <SharePopover me={me} workspaceId={workspace.workspaceId} onChanged={onChanged} />
               {workspace.role === 'owner' && (
                 <Button variant="ghost" size="icon" onClick={onOpenSettings} title="Workspace settings">
