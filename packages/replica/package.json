@@ -1,0 +1,34 @@
+{
+  "name": "@shakystar/memorize-hub-replica",
+  "version": "0.1.0",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE.md",
+  "author": "shakystar",
+  "description": "memorize Hub read/write surface (H060) - a thin headless host around the published memorize engine. S1: on-demand authoring (form A) - author one domain event with the calling USER's account as provenance writer, push it over the public events route, exit. No domain logic lives here.",
+  "type": "module",
+  "bin": {
+    "hub-replica": "dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "e2e": "pnpm build && tsx scripts/e2e/run-authoring-e2e.ts"
+  },
+  "dependencies": {
+    "@shakystar/memorize": "3.0.0-dev.68"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@typescript-eslint/eslint-plugin": "^8.58.1",
+    "@typescript-eslint/parser": "^8.58.1",
+    "eslint": "^10.2.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  }
+}

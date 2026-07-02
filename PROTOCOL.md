@@ -18,6 +18,7 @@ conventions (identifiers, auth principal, `read_only`/scope, status codes,
 | [`docs/protocol/README.md`](./docs/protocol/README.md) | conventions (bind on every endpoint) | — |
 | [`docs/protocol/transport.md`](./docs/protocol/transport.md) | `POST/GET /v1/projects/:storeId/events`, `/healthz`, E2E envelope | relay (transport) |
 | [`docs/protocol/store-resolution.md`](./docs/protocol/store-resolution.md) | server-minted store ids, discovery map | gateway (control) |
+| [`docs/protocol/account.md`](./docs/protocol/account.md) | `GET /v1/account` identity echo (whoami) | gateway (control) |
 | [`docs/protocol/personal-store.md`](./docs/protocol/personal-store.md) | `GET /v1/account/personal-store` (`psm_`) | gateway (control) |
 | [`docs/protocol/workspace.md`](./docs/protocol/workspace.md) | `wsp_` create / invite / join / membership / roles | gateway (control) |
 
