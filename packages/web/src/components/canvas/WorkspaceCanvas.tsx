@@ -14,12 +14,12 @@ import { MOCK_ENABLED, MOCK_TASKS, MOCK_TIMELINE } from '@/lib/mock';
  * demo mode (the landing experience) — always badged, never silent.
  */
 
-type Tab = 'timeline' | 'knowledge' | 'tasks' | 'decisions' | 'sources';
+type Tab = 'timeline' | 'tasks' | 'talk' | 'decisions' | 'sources';
 
 const TABS: Array<{ id: Tab; label: string; tbd?: boolean }> = [
   { id: 'timeline', label: 'Timeline' },
   { id: 'tasks', label: 'Tasks' },
-  { id: 'knowledge', label: 'Knowledge', tbd: true },
+  { id: 'talk', label: 'Talk', tbd: true },
   { id: 'decisions', label: 'Decisions', tbd: true },
   { id: 'sources', label: 'Sources', tbd: true },
 ];
@@ -69,10 +69,12 @@ export function WorkspaceCanvas({ meEmail, demo }: { meEmail: string; demo?: boo
             emptyState={<TimelineEmptyState />}
           />
         )}
-        {tab === 'knowledge' && (
-          <ComingSoon title="Knowledge">
-            Everything this workspace has learned, as a living document — decisions, the why
-            behind them, and progress, grouped by topic and sorted by importance.
+        {tab === 'talk' && (
+          <ComingSoon title="Talk">
+            Talk to this workspace&apos;s agents. A message you write here becomes an event in
+            the shared log; each member&apos;s agent pulls it on its next sync and picks it up
+            at session start. No server-side AI — replies come from your own machines.
+            Leave-a-message first, realtime later.
           </ComingSoon>
         )}
         {tab === 'tasks' && (
