@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { ConnectTab } from '@/components/canvas/ConnectTab';
 import { TasksTab } from '@/components/canvas/TasksTab';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MOCK_ENABLED, MOCK_TASKS, MOCK_TIMELINE } from '@/lib/mock';
 import { getWorkspaceTasks, getWorkspaceTimeline } from '@/lib/api';
+import { useLiveFeed } from '@/lib/live-feed';
 import type { TaskEntry, TimelineItem } from '@/lib/domain';
 
 /**
@@ -51,71 +52,17 @@ export function WorkspaceCanvas({
 }) {
   const example = MOCK_ENABLED || demo;
   const [tab, setTab] = useState<Tab>(() => initialTab(Boolean(demo)));
-  const [timeline, setTimeline] = useState<{
-    items: TimelineItem[];
-    loading: boolean;
-    error?: string;
-  }>({ items: [], loading: false });
-  const [tasks, setTasks] = useState<{
-    items: TaskEntry[];
-    loading: boolean;
-    loaded: boolean;
-    error?: string;
-  }>({ items: [], loading: false, loaded: false });
   const badge = demo ? 'Example data' : MOCK_ENABLED ? 'Mock data - dev only' : undefined;
 
-  useEffect(() => {
-    if (example) {
-      setTimeline({ items: [], loading: false });
-      return;
-    }
-    let cancelled = false;
-    setTimeline((current) => ({ items: current.items, loading: true }));
-    getWorkspaceTimeline(workspaceId)
-      .then((result) => {
-        if (!cancelled) setTimeline({ items: result.items, loading: false });
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setTimeline({
-            items: [],
-            loading: false,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [example, workspaceId]);
-
-  // Tasks load lazily on first tab visit — every replica read is a relay pull,
-  // and Timeline is the landing tab, so the board should not double that cost
-  // for visitors who never open it. The fetch is guarded by a ref, NOT by task
-  // state in the dependency array: depending on state the effect itself writes
-  // re-runs the cleanup mid-flight and discards the response (the "Loading
-  // tasks" hang this replaced). The ref also makes the guard workspace-keyed,
-  // so a workspace switch refetches and a stale response is dropped.
-  const tasksFetchedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (example || tab !== 'tasks' || tasksFetchedFor.current === workspaceId) return;
-    tasksFetchedFor.current = workspaceId;
-    setTasks({ items: [], loading: true, loaded: false });
-    getWorkspaceTasks(workspaceId)
-      .then((result) => {
-        if (tasksFetchedFor.current !== workspaceId) return;
-        setTasks({ items: result.items, loading: false, loaded: true });
-      })
-      .catch((error: unknown) => {
-        if (tasksFetchedFor.current !== workspaceId) return;
-        setTasks({
-          items: [],
-          loading: false,
-          loaded: true,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-  }, [example, tab, workspaceId]);
+  // Both surfaces prefetch at mount, in parallel: by the time the Tasks tab is
+  // clicked its data has usually arrived, and cached items from an earlier
+  // visit render instantly while the refresh runs (stale-while-revalidate).
+  const timeline = useLiveFeed<TimelineItem>(`hub:timeline:${workspaceId}`, !example, () =>
+    getWorkspaceTimeline(workspaceId).then((result) => result.items),
+  );
+  const tasks = useLiveFeed<TaskEntry>(`hub:tasks:${workspaceId}`, !example, () =>
+    getWorkspaceTasks(workspaceId).then((result) => result.items),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -187,7 +134,7 @@ export function WorkspaceCanvas({
             tasks={example ? MOCK_TASKS : tasks.items}
             badge={badge}
             emptyState={
-              !example && (tasks.loading || !tasks.loaded) ? (
+              !example && tasks.loading ? (
                 <TimelineStatus title="Loading tasks" />
               ) : !example && tasks.error ? (
                 <TimelineStatus title="Tasks unavailable" detail={tasks.error} />
