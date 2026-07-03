@@ -48,7 +48,7 @@
   M5 검증이 ~30초 수렴을 실사용에 부족하다고 실측**(SoT-042/043의 "대체 문서로만 도입"
   트리거) - 핸드오프의 "TasksTab 다음"보다 뒤, 실측 전 착수는 YAGNI. 착수 시 산출:
   신규 Hub H-doc(주 메커니즘) + memorize SoT-044(042 supersede, 클라 구독 케이던스).
-  트래킹 = memorize `task_mr52rm62_b7jgo7tf`.
+  트래킹 = memorize `task_mr53liwi_adxx16lc` (구 `task_mr52rm62_b7jgo7tf`, 실수 cancel 후 재생성).
 - **워크스페이스 retention/compaction** - 연기(로드맵). 공유 `wsp_` 로그의 바이트 회수는
   retract 전파 후 replica별 lazy 압축으로(memorize SoT-050).
 - **결제 tier(free/team/pro) 정의·가격·quota 수치** - 연기, 코어 완결 후 layered
