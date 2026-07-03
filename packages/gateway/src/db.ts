@@ -161,6 +161,26 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       CREATE INDEX IF NOT EXISTS idx_device_expires ON device_auth(expires_at);
     `);
   },
+  // v5 — source-store attribution (docs/protocol/workspace.md §Source stores). A
+  // member self-declares "my local store proj_X writes into this workspace" so the
+  // Timeline can resolve per-event `sourceProjectId` provenance to the owning
+  // ACCOUNT (canvas chat grammar: bubble unit = member). Voluntary control-plane
+  // metadata, declared by the client — the gateway still never reads event
+  // content (H010).
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS source_stores (
+        store_id          TEXT NOT NULL REFERENCES stores(store_id),
+        source_project_id TEXT NOT NULL,           -- client-minted proj_…
+        account_id        TEXT NOT NULL REFERENCES accounts(id),
+        label             TEXT,                    -- human handle (repo/machine), display only
+        registered_at     TEXT NOT NULL,
+        updated_at        TEXT NOT NULL,
+        PRIMARY KEY (store_id, source_project_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_source_stores_account ON source_stores(account_id);
+    `);
+  },
 ];
 
 function runMigrations(db: Database.Database): void {

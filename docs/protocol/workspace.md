@@ -126,6 +126,67 @@ Response `200`:
 }
 ```
 
+### `POST /v1/workspaces/:workspaceId/source-stores`
+
+A member self-declares "my local store `proj_…` writes into this workspace". This
+is the control-plane bridge that lets the Hub resolve per-event `sourceProjectId`
+provenance to the owning **account** without ever reading event content (the
+gateway never parses payloads, and `writer` inside events is an *agent* actor
+like `codex`, not an identity). The Timeline uses it to attribute items to
+members; unregistered source stores fall back to raw provenance labels.
+
+The client calls this when it binds/joins a workspace, and again (idempotently)
+alongside push, so stores bound before this endpoint existed heal on their next
+sync.
+
+- **Body:** `{ "sourceProjectId": "proj_...", "label"?: "..." }` —
+  `sourceProjectId` is the client-minted local store id (`proj_` prefix, <= 125
+  chars, `[A-Za-z0-9_-]`, else `400`); `label` is an optional human display
+  handle for the store (repo/folder/machine name; <= 120 chars), metadata only.
+- **Auth:** unlike the management routes above, this is a **data-plane
+  companion** — it travels with push, so it is callable with the same key a
+  syncing machine holds: membership ∩ key scope ∩ non-`read_only` (the
+  events-route gate), **scoped keys allowed**. Non-member -> `403` (data-plane
+  denial, mirroring the events route).
+- **First registration wins:** a `sourceProjectId` already registered to
+  **another** account in this workspace -> `409` (spoof guard — you cannot claim
+  someone else's bubbles). Same-account re-registration succeeds and updates the
+  label.
+
+Response `200`:
+
+```jsonc
+{
+  "workspaceId": "wsp_...",
+  "sourceProjectId": "proj_...",
+  "accountId": "acc_...",           // the caller — registration is always self
+  "label": "..."                    // null when not provided
+}
+```
+
+Registration is a display/attribution aid, never authorization: events push and
+pull exactly the same with or without it (opacity invariant #4 untouched).
+
+### `GET /v1/workspaces/:workspaceId/timeline`
+
+Browser/API read surface for the workspace Timeline (H060). The gateway
+authenticates, applies the same membership ACL as the roster, and forwards to
+the internal headless replica, which pulls the `wsp_` union and projects
+memories. Any member may read; non-member/unknown -> `404`.
+
+- **Query:** `limit`? — newest N items, chronological display order preserved.
+- **Labeling (canvas chat grammar — bubble unit = member):** the gateway
+  resolves each item's `member` to the owning account's **email**, through the
+  source-store registry first (client-synced events) and the membership roster
+  second (Hub-authored events). Registered labels replace `sourceProjectLabel`.
+  `writer` stays the raw agent actor (`codex`, `claude`, …) as bubble metadata,
+  except when it is itself an account id (Hub web-authored events). Items whose
+  provenance resolves to nothing pass through unlabeled.
+
+Response `200`: `{ "storeId": "...", "pulled": {...}, "items": [ { "id", "at",
+"type", "kind", "text", "salience", "member", "writer"?, "sourceProjectId"?,
+"sourceProjectLabel"?, "tags"? } ] }`.
+
 ### `POST /v1/workspaces/:workspaceId/invites`
 
 Owner mints a revocable, optionally-expiring, **multi-use** invite. Always grants
