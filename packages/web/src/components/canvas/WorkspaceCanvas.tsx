@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { ConnectTab } from '@/components/canvas/ConnectTab';
 import { TasksTab } from '@/components/canvas/TasksTab';
@@ -89,36 +89,33 @@ export function WorkspaceCanvas({
     };
   }, [example, workspaceId]);
 
-  // A workspace switch invalidates the previous board.
-  useEffect(() => {
-    setTasks({ items: [], loading: false, loaded: false });
-  }, [example, workspaceId]);
-
   // Tasks load lazily on first tab visit — every replica read is a relay pull,
   // and Timeline is the landing tab, so the board should not double that cost
-  // for visitors who never open it.
+  // for visitors who never open it. The fetch is guarded by a ref, NOT by task
+  // state in the dependency array: depending on state the effect itself writes
+  // re-runs the cleanup mid-flight and discards the response (the "Loading
+  // tasks" hang this replaced). The ref also makes the guard workspace-keyed,
+  // so a workspace switch refetches and a stale response is dropped.
+  const tasksFetchedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (example || tab !== 'tasks' || tasks.loaded || tasks.loading) return;
-    let cancelled = false;
-    setTasks((current) => ({ ...current, loading: true }));
+    if (example || tab !== 'tasks' || tasksFetchedFor.current === workspaceId) return;
+    tasksFetchedFor.current = workspaceId;
+    setTasks({ items: [], loading: true, loaded: false });
     getWorkspaceTasks(workspaceId)
       .then((result) => {
-        if (!cancelled) setTasks({ items: result.items, loading: false, loaded: true });
+        if (tasksFetchedFor.current !== workspaceId) return;
+        setTasks({ items: result.items, loading: false, loaded: true });
       })
       .catch((error: unknown) => {
-        if (!cancelled) {
-          setTasks({
-            items: [],
-            loading: false,
-            loaded: true,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
+        if (tasksFetchedFor.current !== workspaceId) return;
+        setTasks({
+          items: [],
+          loading: false,
+          loaded: true,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [example, tab, tasks.loaded, tasks.loading, workspaceId]);
+  }, [example, tab, workspaceId]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
