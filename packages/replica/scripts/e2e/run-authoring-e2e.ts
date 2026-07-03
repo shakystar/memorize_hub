@@ -56,18 +56,22 @@ async function freePort(): Promise<number> {
 function run(
   command: string,
   args: string[],
-  options: { cwd: string; env?: Record<string, string> },
+  options: { cwd: string; env?: Record<string, string>; input?: string },
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolveRun, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [options.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
     });
+    if (options.input !== undefined) {
+      child.stdin?.write(options.input);
+      child.stdin?.end();
+    }
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
-    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+    child.stdout?.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr?.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
     child.once('error', reject);
     child.once('close', (code) => resolveRun({ code: code ?? -1, stdout, stderr }));
   });
@@ -183,6 +187,43 @@ try {
   // Seed the wsp_ store on the relay so the replica's push has a peer log.
   await cli(userHome, userProj, 'project', 'sync', '--push');
 
+  // --- member attribution: a CLI machine syncs a memory, then self-declares
+  // its source store so the Timeline can resolve provenance to the account.
+  let userProjId = '';
+  for await (const match of glob('accounts/*/projects/*/memorize.db', { cwd: userHome })) {
+    userProjId = match.split(/[\\/]/).at(-2) ?? '';
+    break;
+  }
+  check('user machine has a local proj_ store', userProjId.startsWith('proj_'), userProjId);
+
+  const imported = await run(
+    process.execPath,
+    [MEMORIZE_CLI, 'memory', 'import', '--source', 'e2e-laptop'],
+    {
+      cwd: userProj,
+      env: { MEMORIZE_ROOT: userHome, MEMORIZE_LLM_BACKEND: 'off' },
+      input: JSON.stringify([
+        { kind: 'progress', text: 'synced from the laptop CLI', salience: 6 },
+      ]),
+    },
+  );
+  check('CLI machine imports a memory', imported.code === 0, imported.stdout + imported.stderr);
+  await cli(userHome, userProj, 'project', 'sync', '--push');
+
+  const registered = await fetch(
+    `${gwUrl}/v1/workspaces/${created.workspaceId}/source-stores`,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${aliceKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ sourceProjectId: userProjId, label: 'alice-laptop' }),
+    },
+  );
+  check(
+    'client registers its source store with the gateway',
+    registered.status === 200,
+    `${registered.status} ${await registered.text().catch(() => '')}`,
+  );
+
   const text = 'decided on the web: ship the replica';
   const authored = await run(
     process.execPath,
@@ -230,6 +271,7 @@ try {
           writer?: string;
           member: string;
           sourceProjectId?: string;
+          sourceProjectLabel?: string;
         }>;
       })
     : { pulled: { inserted: 0 }, items: [] };
@@ -250,6 +292,27 @@ try {
     'timeline item preserves the server lane',
     timelineItem?.sourceProjectId === result.storeId,
     JSON.stringify({ sourceProjectId: timelineItem?.sourceProjectId, expected: result.storeId }),
+  );
+
+  // Canvas chat grammar: the CLI-synced item's bubble belongs to the ACCOUNT
+  // (resolved via the source-store registry), while the agent actor stays as
+  // bubble metadata and the registered label replaces the raw proj_ id.
+  const cliItem = timeline.items.find((item) => item.text.includes('laptop CLI'));
+  check('timeline contains the CLI-synced memory', Boolean(cliItem));
+  check(
+    'CLI-synced item is attributed to the member account',
+    cliItem?.member === 'alice@replica.e2e',
+    JSON.stringify({ member: cliItem?.member }),
+  );
+  check(
+    'CLI-synced item keeps the agent actor as writer metadata',
+    Boolean(cliItem?.writer) && !(cliItem?.writer ?? '').includes('@'),
+    JSON.stringify({ writer: cliItem?.writer }),
+  );
+  check(
+    'CLI-synced item carries the registered human label',
+    cliItem?.sourceProjectLabel === 'alice-laptop',
+    JSON.stringify({ sourceProjectLabel: cliItem?.sourceProjectLabel }),
   );
 
   const timelineCli = await run(

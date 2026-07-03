@@ -8,6 +8,7 @@ import { loadGatewayConfig, type GatewayConfig } from '../../src/config.js';
 import { openGatewayDb } from '../../src/db.js';
 import { issueApiKey } from '../../src/keys.js';
 import { createGatewayServer } from '../../src/server.js';
+import { registerSourceStore } from '../../src/source-stores.js';
 import { createStore } from '../../src/stores.js';
 
 const db = openGatewayDb(':memory:');
@@ -16,6 +17,9 @@ const bob = upsertAccountByEmail(db, 'bob@timeline.example');
 const { storeId } = createStore(db, alice, 'timeline');
 const aliceKey = issueApiKey(db, alice, 'alice').plaintext;
 const bobKey = issueApiKey(db, bob, 'bob').plaintext;
+// Alice's laptop declared its local store — how client-synced events (whose raw
+// member/writer is an agent actor, not an identity) resolve to her bubbles.
+registerSourceStore(db, storeId, 'proj_alice_laptop', alice, 'memorize-hub');
 
 let base = '';
 let replicaUrl = '';
@@ -48,6 +52,33 @@ beforeAll(async () => {
           writer: alice,
           sourceProjectId: 'proj_hub_timeline',
           sourceProjectLabel: 'proj_hub_timeline',
+        },
+        {
+          // A client-synced event: raw member/writer is the AGENT actor, and
+          // only the registered source store ties it to Alice's account.
+          id: 'mem_cli',
+          at: '2026-07-03T01:00:00.000Z',
+          type: 'memory.consolidated',
+          kind: 'progress',
+          text: 'synced from the laptop CLI',
+          salience: 5,
+          member: 'codex',
+          writer: 'codex',
+          sourceProjectId: 'proj_alice_laptop',
+          sourceProjectLabel: 'proj_alice_laptop',
+        },
+        {
+          // Unregistered legacy provenance: passes through unlabeled.
+          id: 'mem_legacy',
+          at: '2026-07-03T02:00:00.000Z',
+          type: 'memory.consolidated',
+          kind: 'progress',
+          text: 'pre-registration event',
+          salience: 4,
+          member: 'system',
+          writer: 'system',
+          sourceProjectId: 'proj_unregistered',
+          sourceProjectLabel: 'proj_unregistered',
         },
       ],
     }));
@@ -93,12 +124,48 @@ describe('workspace timeline endpoint', () => {
     expect(res.status).toBe(200);
     expect(replicaRequests.at(-1)).toContain('limit=25');
     const body = (await res.json()) as {
-      items: Array<{ member: string; writer?: string; text: string }>;
+      items: Array<{
+        member: string;
+        writer?: string;
+        text: string;
+        sourceProjectLabel?: string;
+      }>;
     };
     expect(body.items[0]).toMatchObject({
       member: 'alice@timeline.example',
       writer: 'alice@timeline.example',
       text: 'live timeline reaches the web',
+    });
+  });
+
+  it('attributes client-synced items to the account via the source-store registry', async () => {
+    const res = await fetch(`${base}/v1/workspaces/${storeId}/timeline`, {
+      headers: auth(aliceKey),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: Array<{ member: string; writer?: string; sourceProjectLabel?: string }>;
+    };
+    // member = owning account's email; writer stays the agent actor as bubble
+    // meta; the registered label humanizes the raw proj_ id.
+    expect(body.items[1]).toMatchObject({
+      member: 'alice@timeline.example',
+      writer: 'codex',
+      sourceProjectLabel: 'memorize-hub',
+    });
+  });
+
+  it('passes unregistered provenance through unlabeled', async () => {
+    const res = await fetch(`${base}/v1/workspaces/${storeId}/timeline`, {
+      headers: auth(aliceKey),
+    });
+    const body = (await res.json()) as {
+      items: Array<{ member: string; writer?: string; sourceProjectLabel?: string }>;
+    };
+    expect(body.items[2]).toMatchObject({
+      member: 'system',
+      writer: 'system',
+      sourceProjectLabel: 'proj_unregistered',
     });
   });
 });

@@ -21,6 +21,7 @@ import {
   listInvites,
   listWorkspaces,
   mintInvite,
+  registerSourceStore,
   removeMember,
   renameWorkspace,
   revokeInvite,
@@ -50,6 +51,7 @@ const EVENTS_ROUTE = /^\/v1\/projects\/([^/]+)\/events$/;
 const CLONE_PAGE = /^\/clone\/([^/]+)$/;
 const WS_ID = /^\/v1\/workspaces\/([^/]+)$/;
 const WS_TIMELINE = /^\/v1\/workspaces\/([^/]+)\/timeline$/;
+const WS_SOURCE_STORES = /^\/v1\/workspaces\/([^/]+)\/source-stores$/;
 const WS_INVITES = /^\/v1\/workspaces\/([^/]+)\/invites$/;
 const WS_INVITE_ID = /^\/v1\/workspaces\/([^/]+)\/invites\/([^/]+)$/;
 const WS_MEMBER = /^\/v1\/workspaces\/([^/]+)\/members\/([^/]+)$/;
@@ -123,6 +125,10 @@ async function route(
   const timeline = WS_TIMELINE.exec(p);
   if (timeline && method === 'GET') {
     return handleWorkspaceTimeline(req, res, ctx, decode(timeline[1]), url.searchParams);
+  }
+  const sourceStores = WS_SOURCE_STORES.exec(p);
+  if (sourceStores && method === 'POST') {
+    return registerSourceStore(req, res, ctx, decode(sourceStores[1]));
   }
   const inviteId = WS_INVITE_ID.exec(p);
   if (inviteId && method === 'DELETE') {

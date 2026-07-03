@@ -11,6 +11,7 @@ import {
 } from './invites.js';
 import { authorize } from './policy.js';
 import { resolvePrincipal } from './principal.js';
+import { registerSourceStore as dalRegisterSourceStore } from './source-stores.js';
 import {
   createStore,
   deleteStore,
@@ -129,6 +130,56 @@ export function getWorkspace(
     name: store.name,
     inviteReachable: store.inviteReachable,
     members,
+  });
+}
+
+const SOURCE_PROJECT_ID_PATTERN = /^proj_[A-Za-z0-9_-]{1,120}$/;
+
+/**
+ * POST /v1/workspaces/:id/source-stores — a member self-declares "my local store
+ * proj_X writes into this workspace" (docs/protocol/workspace.md §Source stores).
+ * Unlike the management routes this is a DATA-PLANE companion: it travels with
+ * push, so it must be callable with the same key a syncing machine holds —
+ * authorization is the events-route gate (membership ∩ key scope ∩ writable),
+ * NOT the unscoped-management rule. First registration wins; a source store
+ * claimed by another account -> 409. Re-registration updates the label.
+ */
+export async function registerSourceStore(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: GatewayContext,
+  storeId: string,
+): Promise<void> {
+  const principal = resolvePrincipal(ctx, req);
+  if (!principal) return sendError(res, 401, 'authentication required');
+  const decision = authorize(ctx.db, principal, { kind: 'store', storeId }, 'write');
+  if (!decision.ok) return sendError(res, decision.status, decision.error ?? 'forbidden');
+
+  let body: Record<string, unknown>;
+  try {
+    body = await readJson(req);
+  } catch (error) {
+    return sendError(res, (error as { statusCode?: number }).statusCode ?? 400, 'bad request');
+  }
+  const sourceProjectId = body.sourceProjectId;
+  if (typeof sourceProjectId !== 'string' || !SOURCE_PROJECT_ID_PATTERN.test(sourceProjectId)) {
+    return sendError(res, 400, 'sourceProjectId must be a client-minted proj_… id');
+  }
+  const labelRaw = body.label;
+  if (labelRaw !== undefined && labelRaw !== null && (typeof labelRaw !== 'string' || labelRaw.length > 120)) {
+    return sendError(res, 400, 'label must be a string of at most 120 characters');
+  }
+  const label = typeof labelRaw === 'string' && labelRaw.trim().length > 0 ? labelRaw.trim() : undefined;
+
+  const result = dalRegisterSourceStore(ctx.db, storeId, sourceProjectId, principal.accountId, label);
+  if (!result.ok) {
+    return sendError(res, 409, 'source store already registered to another account');
+  }
+  sendJson(res, 200, {
+    workspaceId: storeId,
+    sourceProjectId,
+    accountId: principal.accountId,
+    label: label ?? null,
   });
 }
 
