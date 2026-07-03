@@ -34,8 +34,21 @@
   store별 DEK를 등록 기기 public key로 envelope 래핑, 서버엔 래핑된 DEK + public key만.
   **착수 전 선결 = 복구 정책**(단일 기기 분실 시 영구 소실): 오프라인 복구키 / 서버 매개
   복구(E2E 약화) / 다중 기기 상호 복구 중 택1을 빌드 *전에* 못박아야 한다.
-- **realtime SSE/websocket push** (memorize P3-c: 크로스머신 라이브 워터마크 델타) -
-  연기. poll-on-boundary sync로 v1 충족.
+- **realtime push (워크스페이스 이벤트-가용성 채널)** (memorize P3-c: 크로스머신 라이브
+  워터마크 델타) - 연기, **M5 검증-gated**. v1 케이던스는 세션-묶인 워처 sync(memorize
+  SoT-042/043, ~30초 폴)로 충족. 의도된 형태(2026-07-04 확정): **long-poll(hanging GET)**
+  `GET /v1/workspaces/:id/events/stream?after=<seq>` - after 이후 이벤트 있으면 즉시,
+  없으면 ~25초 후 빈 204. **SSE 대신 택함**: 소비자가 Node CLI 워처라 SSE 이점
+  (EventSource·브라우저 연결 제한 완화)이 무의미하고, 기존 watermark pull이 블록만
+  하면 되며(새 구독 개념 0), Fly 유휴 타임아웃 친화적 + 30초 폴로 공짜 폴백. 거주는
+  gateway(또는 [[H060]] replica), **relay 절대 무변경**([[H010]]); 멤버십 ACL은 기존
+  워크스페이스 멤버십 + source-store self-declaration(#56) 재사용. 신호는 얇게(seq X
+  이후 유무), 최종 정합성은 여전히 클라 watermark pull(union dedup, memorize SoT-030).
+  delegation 라우팅을 서버에 넣는 것이 아님(memorize SoT-041 불변). **착수 게이트 =
+  M5 검증이 ~30초 수렴을 실사용에 부족하다고 실측**(SoT-042/043의 "대체 문서로만 도입"
+  트리거) - 핸드오프의 "TasksTab 다음"보다 뒤, 실측 전 착수는 YAGNI. 착수 시 산출:
+  신규 Hub H-doc(주 메커니즘) + memorize SoT-044(042 supersede, 클라 구독 케이던스).
+  트래킹 = memorize `task_mr52rm62_b7jgo7tf`.
 - **워크스페이스 retention/compaction** - 연기(로드맵). 공유 `wsp_` 로그의 바이트 회수는
   retract 전파 후 replica별 lazy 압축으로(memorize SoT-050).
 - **결제 tier(free/team/pro) 정의·가격·quota 수치** - 연기, 코어 완결 후 layered
