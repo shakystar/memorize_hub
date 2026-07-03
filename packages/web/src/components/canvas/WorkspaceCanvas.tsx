@@ -6,8 +6,8 @@ import { TimelineTab } from '@/components/canvas/TimelineTab';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MOCK_ENABLED, MOCK_TASKS, MOCK_TIMELINE } from '@/lib/mock';
-import { getWorkspaceTimeline } from '@/lib/api';
-import type { TimelineItem } from '@/lib/domain';
+import { getWorkspaceTasks, getWorkspaceTimeline } from '@/lib/api';
+import type { TaskEntry, TimelineItem } from '@/lib/domain';
 
 /**
  * The workspace main canvas: a tab bar over the memory views
@@ -56,6 +56,12 @@ export function WorkspaceCanvas({
     loading: boolean;
     error?: string;
   }>({ items: [], loading: false });
+  const [tasks, setTasks] = useState<{
+    items: TaskEntry[];
+    loading: boolean;
+    loaded: boolean;
+    error?: string;
+  }>({ items: [], loading: false, loaded: false });
   const badge = demo ? 'Example data' : MOCK_ENABLED ? 'Mock data - dev only' : undefined;
 
   useEffect(() => {
@@ -82,6 +88,37 @@ export function WorkspaceCanvas({
       cancelled = true;
     };
   }, [example, workspaceId]);
+
+  // A workspace switch invalidates the previous board.
+  useEffect(() => {
+    setTasks({ items: [], loading: false, loaded: false });
+  }, [example, workspaceId]);
+
+  // Tasks load lazily on first tab visit — every replica read is a relay pull,
+  // and Timeline is the landing tab, so the board should not double that cost
+  // for visitors who never open it.
+  useEffect(() => {
+    if (example || tab !== 'tasks' || tasks.loaded || tasks.loading) return;
+    let cancelled = false;
+    setTasks((current) => ({ ...current, loading: true }));
+    getWorkspaceTasks(workspaceId)
+      .then((result) => {
+        if (!cancelled) setTasks({ items: result.items, loading: false, loaded: true });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setTasks({
+            items: [],
+            loading: false,
+            loaded: true,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [example, tab, tasks.loaded, tasks.loading, workspaceId]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -150,13 +187,16 @@ export function WorkspaceCanvas({
         )}
         {tab === 'tasks' && (
           <TasksTab
-            tasks={example ? MOCK_TASKS : []}
+            tasks={example ? MOCK_TASKS : tasks.items}
             badge={badge}
             emptyState={
-              <ComingSoon title="Tasks">
-                The workspace&apos;s tasks and handoffs — what agents are working on, what is ready
-                to hand over, and what got done.
-              </ComingSoon>
+              !example && (tasks.loading || !tasks.loaded) ? (
+                <TimelineStatus title="Loading tasks" />
+              ) : !example && tasks.error ? (
+                <TimelineStatus title="Tasks unavailable" detail={tasks.error} />
+              ) : (
+                <TasksEmptyState />
+              )
             }
           />
         )}
@@ -194,6 +234,20 @@ function TimelineEmptyState({ onConnect }: { onConnect: () => void }) {
         <Button size="sm" className="mt-4" onClick={onConnect}>
           Connect a machine
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function TasksEmptyState() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
+      <div className="max-w-md rounded-lg border border-dashed border-border p-8 text-center">
+        <p className="text-sm font-medium">No tasks yet</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Tasks and handoffs land here when an agent claims work on a connected machine
+          (<code className="rounded bg-secondary px-1">memorize task create</code>) and syncs.
+        </p>
       </div>
     </div>
   );

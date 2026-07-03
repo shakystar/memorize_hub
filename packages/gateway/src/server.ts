@@ -12,7 +12,7 @@ import { handleDeviceCode, handleDeviceToken } from './device-api.js';
 import { sendError, sendJson } from './http.js';
 import { handleSpa, isSpaPath } from './spa.js';
 import { handleEventsProxy, handlePersonalStore } from './proxy.js';
-import { handleWorkspaceTimeline } from './timeline.js';
+import { handleWorkspaceTasks, handleWorkspaceTimeline } from './timeline.js';
 import {
   createWorkspace,
   deleteWorkspace,
@@ -51,6 +51,7 @@ const EVENTS_ROUTE = /^\/v1\/projects\/([^/]+)\/events$/;
 const CLONE_PAGE = /^\/clone\/([^/]+)$/;
 const WS_ID = /^\/v1\/workspaces\/([^/]+)$/;
 const WS_TIMELINE = /^\/v1\/workspaces\/([^/]+)\/timeline$/;
+const WS_TASKS = /^\/v1\/workspaces\/([^/]+)\/tasks$/;
 const WS_SOURCE_STORES = /^\/v1\/workspaces\/([^/]+)\/source-stores$/;
 const WS_INVITES = /^\/v1\/workspaces\/([^/]+)\/invites$/;
 const WS_INVITE_ID = /^\/v1\/workspaces\/([^/]+)\/invites\/([^/]+)$/;
@@ -125,6 +126,10 @@ async function route(
   const timeline = WS_TIMELINE.exec(p);
   if (timeline && method === 'GET') {
     return handleWorkspaceTimeline(req, res, ctx, decode(timeline[1]), url.searchParams);
+  }
+  const wsTasks = WS_TASKS.exec(p);
+  if (wsTasks && method === 'GET') {
+    return handleWorkspaceTasks(req, res, ctx, decode(wsTasks[1]));
   }
   const sourceStores = WS_SOURCE_STORES.exec(p);
   if (sourceStores && method === 'POST') {

@@ -4,7 +4,7 @@
  * gateway stays the only backend; this never talks to the relay directly.
  */
 
-import type { TimelineItem } from './domain';
+import type { TaskEntry, TimelineItem } from './domain';
 
 export interface Me {
   accountId: string;
@@ -108,6 +108,19 @@ export async function getWorkspaceTimeline(id: string, limit = 100): Promise<Tim
   });
   await ok(res, `GET /v1/workspaces/${id}/timeline`);
   return (await res.json()) as TimelineResponse;
+}
+
+export interface TasksResponse {
+  storeId: string;
+  pulled: { total: number; inserted: number; lastRemoteEventId?: string };
+  items: TaskEntry[];
+}
+
+/** Live workspace tasks board. Demo/mock views do not call this. */
+export async function getWorkspaceTasks(id: string): Promise<TasksResponse> {
+  const res = await fetch(`/v1/workspaces/${q(id)}/tasks`, { credentials: 'same-origin' });
+  await ok(res, `GET /v1/workspaces/${id}/tasks`);
+  return (await res.json()) as TasksResponse;
 }
 
 /** Outstanding invites (owner). */
