@@ -9,17 +9,21 @@ import { roster } from './stores.js';
 
 /**
  * GET /v1/workspaces/:id/timeline
+ * GET /v1/workspaces/:id/tasks
  *
- * Browser/API read surface for Timeline. The gateway only authenticates,
- * applies workspace membership ACL, and forwards to the internal headless
- * replica. Projection and event interpretation stay out of the gateway package —
- * what does happen here is control-plane LABELING (canvas chat grammar): each
+ * Browser/API read surfaces (H060). The gateway only authenticates, applies
+ * workspace membership ACL, and forwards to the internal headless replica.
+ * Projection and event interpretation stay out of the gateway package — what
+ * does happen here is control-plane LABELING (canvas chat grammar): each
  * item's `member` becomes the owning account's email, resolved through the
  * self-declared source-store registry first (client-synced events, whose raw
  * `member` is an agent actor like `codex`) and the roster second (replica-authored
  * events, whose raw `member` is an `acc_…` id). `writer` stays an agent label
- * inside the bubble; registered labels humanize `sourceProjectLabel`.
+ * inside the item; registered labels humanize `sourceProjectLabel`. Items whose
+ * provenance resolves to nothing pass through unlabeled — the pre-provenance /
+ * identity-divergence backlog is NOT guessed at here.
  */
+
 export async function handleWorkspaceTimeline(
   req: IncomingMessage,
   res: ServerResponse,
@@ -27,18 +31,38 @@ export async function handleWorkspaceTimeline(
   storeId: string,
   query: URLSearchParams,
 ): Promise<void> {
+  const params = new URLSearchParams();
+  const limit = query.get('limit');
+  if (limit !== null) params.set('limit', limit);
+  return forwardReplicaRead(req, res, ctx, storeId, 'timeline', params);
+}
+
+export async function handleWorkspaceTasks(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: GatewayContext,
+  storeId: string,
+): Promise<void> {
+  return forwardReplicaRead(req, res, ctx, storeId, 'tasks', new URLSearchParams());
+}
+
+async function forwardReplicaRead(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: GatewayContext,
+  storeId: string,
+  resource: 'timeline' | 'tasks',
+  params: URLSearchParams,
+): Promise<void> {
   const principal = resolvePrincipal(ctx, req);
   if (!principal) return sendError(res, 401, 'authentication required');
 
   const decision = authorize(ctx.db, principal, { kind: 'workspace', storeId }, 'read');
   if (!decision.ok) return sendError(res, decision.status, decision.error ?? 'forbidden');
 
-  const params = new URLSearchParams();
-  const limit = query.get('limit');
-  if (limit !== null) params.set('limit', limit);
   const qs = params.toString();
   const target =
-    `${ctx.config.replicaUrl}/v1/workspaces/${encodeURIComponent(storeId)}/timeline` +
+    `${ctx.config.replicaUrl}/v1/workspaces/${encodeURIComponent(storeId)}/${resource}` +
     (qs ? `?${qs}` : '');
 
   let replicaRes: Response;
@@ -50,7 +74,7 @@ export async function handleWorkspaceTimeline(
 
   let text = await replicaRes.text();
   if (replicaRes.ok) {
-    text = labelTimelineMembers(
+    text = labelMembers(
       text,
       new Map(roster(ctx.db, storeId).map((m) => [m.accountId, m.email])),
       new Map(listSourceStores(ctx.db, storeId).map((s) => [s.sourceProjectId, s])),
@@ -62,7 +86,7 @@ export async function handleWorkspaceTimeline(
   res.end(text);
 }
 
-function labelTimelineMembers(
+function labelMembers(
   raw: string,
   emailsByAccount: Map<string, string>,
   sources: Map<string, SourceStore>,

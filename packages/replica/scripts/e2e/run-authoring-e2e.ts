@@ -208,6 +208,7 @@ try {
     },
   );
   check('CLI machine imports a memory', imported.code === 0, imported.stdout + imported.stderr);
+  await cli(userHome, userProj, 'task', 'create', 'Ship the tasks tab', '--priority', 'high');
   await cli(userHome, userProj, 'project', 'sync', '--push');
 
   const registered = await fetch(
@@ -313,6 +314,45 @@ try {
     'CLI-synced item carries the registered human label',
     cliItem?.sourceProjectLabel === 'alice-laptop',
     JSON.stringify({ sourceProjectLabel: cliItem?.sourceProjectLabel }),
+  );
+
+  // Tasks board: the same auth + labeling path as timeline, task projection.
+  const tasksRes = await fetch(`${gwUrl}/v1/workspaces/${created.workspaceId}/tasks`, {
+    headers: { authorization: `Bearer ${aliceKey}` },
+  });
+  const tasksText = await tasksRes.text();
+  check(
+    'gateway tasks endpoint pulls through the replica',
+    tasksRes.status === 200,
+    `${tasksRes.status} ${tasksText}`,
+  );
+  const tasksBody = tasksRes.status === 200
+    ? (JSON.parse(tasksText) as {
+        items: Array<{
+          title: string;
+          status: string;
+          priority: string;
+          member: string;
+          sourceProjectLabel?: string;
+        }>;
+      })
+    : { items: [] };
+  const taskItem = tasksBody.items.find((item) => item.title === 'Ship the tasks tab');
+  check('tasks board contains the CLI-created task', Boolean(taskItem));
+  check(
+    'task card carries status and priority',
+    taskItem?.status === 'todo' && taskItem?.priority === 'high',
+    JSON.stringify({ status: taskItem?.status, priority: taskItem?.priority }),
+  );
+  check(
+    'task card is attributed to the member account',
+    taskItem?.member === 'alice@replica.e2e',
+    JSON.stringify({ member: taskItem?.member }),
+  );
+  check(
+    'task card carries the registered source label',
+    taskItem?.sourceProjectLabel === 'alice-laptop',
+    JSON.stringify({ sourceProjectLabel: taskItem?.sourceProjectLabel }),
   );
 
   const timelineCli = await run(

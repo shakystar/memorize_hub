@@ -31,6 +31,29 @@ beforeAll(async () => {
   replica = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://replica.test');
     replicaRequests.push(url.toString());
+    if (url.pathname === `/v1/workspaces/${storeId}/tasks`) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        storeId: 'proj_hub_timeline',
+        pulled: { total: 1, inserted: 1 },
+        items: [
+          {
+            id: 'task_live',
+            at: '2026-07-03T02:00:00.000Z',
+            member: 'codex',
+            writer: 'codex',
+            sourceProjectId: 'proj_alice_laptop',
+            sourceProjectLabel: 'proj_alice_laptop',
+            title: 'wire the tasks tab',
+            status: 'handoff_ready',
+            priority: 'high',
+            ownerType: 'agent',
+            handoff: { summary: 'replica done', nextAction: 'ship the gateway route' },
+          },
+        ],
+      }));
+      return;
+    }
     if (url.pathname !== `/v1/workspaces/${storeId}/timeline`) {
       res.writeHead(404, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: 'not found' }));
@@ -166,6 +189,44 @@ describe('workspace timeline endpoint', () => {
       member: 'system',
       writer: 'system',
       sourceProjectLabel: 'proj_unregistered',
+    });
+  });
+});
+
+describe('workspace tasks endpoint', () => {
+  it('401s without a principal and 404s a non-member', async () => {
+    expect((await fetch(`${base}/v1/workspaces/${storeId}/tasks`)).status).toBe(401);
+    const before = replicaRequests.length;
+    const res = await fetch(`${base}/v1/workspaces/${storeId}/tasks`, {
+      headers: auth(bobKey),
+    });
+    expect(res.status).toBe(404);
+    expect(replicaRequests).toHaveLength(before);
+  });
+
+  it('proxies member reads and applies the same member labeling as the timeline', async () => {
+    const res = await fetch(`${base}/v1/workspaces/${storeId}/tasks`, {
+      headers: auth(aliceKey),
+    });
+    expect(res.status).toBe(200);
+    expect(replicaRequests.at(-1)).toContain(`/v1/workspaces/${storeId}/tasks`);
+    const body = (await res.json()) as {
+      items: Array<{
+        member: string;
+        writer?: string;
+        sourceProjectLabel?: string;
+        title: string;
+        status: string;
+        handoff?: { nextAction: string };
+      }>;
+    };
+    expect(body.items[0]).toMatchObject({
+      member: 'alice@timeline.example', // via the source-store registry
+      writer: 'codex', // agent actor stays card metadata
+      sourceProjectLabel: 'memorize-hub',
+      title: 'wire the tasks tab',
+      status: 'handoff_ready',
+      handoff: { nextAction: 'ship the gateway route' },
     });
   });
 });

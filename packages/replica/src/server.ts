@@ -1,5 +1,6 @@
 import { createServer, type Server, type ServerResponse } from 'node:http';
 
+import { readTasks } from './tasks.js';
 import { readTimeline } from './timeline.js';
 
 export interface ReplicaServerOptions {
@@ -8,6 +9,7 @@ export interface ReplicaServerOptions {
 }
 
 const TIMELINE_ROUTE = /^\/v1\/workspaces\/([^/]+)\/timeline$/;
+const TASKS_ROUTE = /^\/v1\/workspaces\/([^/]+)\/tasks$/;
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -28,11 +30,27 @@ export function createReplicaServer(options: ReplicaServerOptions): Server {
       const timeline = TIMELINE_ROUTE.exec(url.pathname);
       if (method === 'GET' && timeline) {
         const rawLimit = url.searchParams.get('limit');
+        const limit = rawLimit === null ? undefined : Number(rawLimit);
+        if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+          sendJson(res, 400, { error: 'limit must be a positive integer' });
+          return;
+        }
         const result = await readTimeline({
           hubUrl: options.relayUrl,
           apiKey: options.relayToken ?? '',
           workspaceId: decodeURIComponent(timeline[1] ?? ''),
-          ...(rawLimit ? { limit: Number(rawLimit) } : {}),
+          ...(limit !== undefined ? { limit } : {}),
+        });
+        sendJson(res, 200, result);
+        return;
+      }
+
+      const tasks = TASKS_ROUTE.exec(url.pathname);
+      if (method === 'GET' && tasks) {
+        const result = await readTasks({
+          hubUrl: options.relayUrl,
+          apiKey: options.relayToken ?? '',
+          workspaceId: decodeURIComponent(tasks[1] ?? ''),
         });
         sendJson(res, 200, result);
         return;

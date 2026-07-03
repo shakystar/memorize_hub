@@ -187,6 +187,27 @@ Response `200`: `{ "storeId": "...", "pulled": {...}, "items": [ { "id", "at",
 "type", "kind", "text", "salience", "member", "writer"?, "sourceProjectId"?,
 "sourceProjectLabel"?, "tags"? } ] }`.
 
+### `GET /v1/workspaces/:workspaceId/tasks`
+
+Browser/API read surface for the workspace Tasks board (H060) — the Timeline's
+sibling: same auth (any member; non-member/unknown -> `404`), same internal
+replica forward, same member labeling. The replica projects the `wsp_` union's
+Tasks and joins each task's LATEST handoff server-side, so a `handoff_ready`
+card can show the next action without a second fetch.
+
+- Item `member` is attributed from the task's most recent `task.*` event —
+  the account whose machine last moved it — through the same source-store /
+  roster resolution as the Timeline. Tasks whose events carry no provenance
+  (pre-Phase-0) pass through unresolved; the gateway does not guess.
+- The domain defaults `description`/`goal` to `''` and list fields to `[]` —
+  absent, not filled — so the wire omits them.
+
+Response `200`: `{ "storeId": "...", "pulled": {...}, "items": [ { "id", "at",
+"member", "writer"?, "sourceProjectId"?, "sourceProjectLabel"?, "title",
+"status", "priority", "ownerType", "description"?, "goal"?,
+"acceptanceCriteria"?, "openQuestions"?, "riskNotes"?,
+"handoff"?: { "summary", "nextAction", "doneItems"?, "remainingItems"? } } ] }`.
+
 ### `POST /v1/workspaces/:workspaceId/invites`
 
 Owner mints a revocable, optionally-expiring, **multi-use** invite. Always grants
