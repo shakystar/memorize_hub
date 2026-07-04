@@ -18,6 +18,8 @@ import {
 import { cn } from '@/lib/utils';
 import { getMe, listWorkspaces, type Me, type Workspace } from '@/lib/api';
 import { MOCK_ENABLED, MOCK_ME, MOCK_WORKSPACES } from '@/lib/mock';
+import { useAppLocation } from '@/lib/use-app-location';
+import type { Tab } from '@/lib/tabs';
 
 function Sidebar({
   me,
@@ -161,6 +163,8 @@ function WorkspaceView({
   workspace,
   onOpenSettings,
   onChanged,
+  tab,
+  onTabChange,
 }: {
   me: Me;
   /** Anonymous demo: Example chip + a sign-in CTA instead of share/settings. */
@@ -168,6 +172,8 @@ function WorkspaceView({
   workspace: Workspace;
   onOpenSettings: () => void;
   onChanged: (opts?: { removed?: boolean }) => void;
+  tab: Tab;
+  onTabChange: (t: Tab) => void;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -201,7 +207,13 @@ function WorkspaceView({
         </div>
       </div>
 
-      <WorkspaceCanvas workspaceId={workspace.workspaceId} meEmail={me.email} demo={demo} />
+      <WorkspaceCanvas
+        workspaceId={workspace.workspaceId}
+        meEmail={me.email}
+        demo={demo}
+        tab={tab}
+        onTabChange={onTabChange}
+      />
     </div>
   );
 }
@@ -250,11 +262,12 @@ function CenteredCard({ children }: { children: ReactNode }) {
 export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [view, setView] = useState<'workspace' | 'personal'>('workspace');
+  const { route, navigate } = useAppLocation();
+  const view = route.view;
+  const currentTab = route.view === 'workspace' ? route.tab : 'timeline';
 
   const refreshWorkspaces = useCallback(async () => {
     const ws = await listWorkspaces();
@@ -273,8 +286,7 @@ export default function App() {
       const m = await getMe();
       setMe(m);
       if (m) {
-        const ws = await refreshWorkspaces();
-        setSelectedId((cur) => cur ?? ws[0]?.workspaceId ?? null);
+        await refreshWorkspaces();
       }
     } catch (err) {
       // Dev without a running gateway: fall back to mock identity so the
@@ -282,7 +294,6 @@ export default function App() {
       if (!MOCK_ENABLED) throw err;
       setMe(MOCK_ME);
       setWorkspaces(MOCK_WORKSPACES);
-      setSelectedId(MOCK_WORKSPACES[0]?.workspaceId ?? null);
     }
   }, [refreshWorkspaces]);
 
@@ -290,23 +301,51 @@ export default function App() {
     void load();
   }, [load]);
 
+  // No session -> anonymous demo instead of a login wall: the app shell with
+  // a badged example workspace, and Sign in where the account chrome was.
+  // Computed above the loading early-return since the reconciliation effect
+  // below (a hook) needs shownWorkspaces and hooks can't follow a return.
+  const demo = me === null;
+  const shownWorkspaces = demo ? MOCK_WORKSPACES : workspaces;
+
+  // Reconcile the URL against the actual workspace list after load: an empty
+  // /app or an id no longer in the list (left/deleted/no-access) gets replaced
+  // with the first workspace. There is no error page.
+  useEffect(() => {
+    if (me === undefined) return; // still loading (the Loading… card is up)
+    if (route.view !== 'workspace') return;
+    const first = shownWorkspaces[0];
+    if (!first) return; // "No workspace selected" empty state
+    const exists =
+      route.workspaceId != null &&
+      shownWorkspaces.some((w) => w.workspaceId === route.workspaceId);
+    if (!exists) {
+      navigate(
+        { view: 'workspace', workspaceId: first.workspaceId, tab: route.tab },
+        { replace: true },
+      );
+    }
+  }, [me, shownWorkspaces, route, navigate]);
+
   if (me === undefined) {
     return <CenteredCard>
       <p className="text-sm text-muted-foreground">Loading…</p>
     </CenteredCard>;
   }
 
-  // No session -> anonymous demo instead of a login wall: the app shell with
-  // a badged example workspace, and Sign in where the account chrome was.
-  const demo = me === null;
   const account = me ?? MOCK_ME;
-  const shownWorkspaces = demo ? MOCK_WORKSPACES : workspaces;
+  const routeWorkspaceId = route.view === 'workspace' ? route.workspaceId : null;
   const selected =
-    shownWorkspaces.find((w) => w.workspaceId === selectedId) ??
+    shownWorkspaces.find((w) => w.workspaceId === routeWorkspaceId) ??
     (demo ? (shownWorkspaces[0] ?? null) : null);
   const onChanged = async (opts?: { removed?: boolean }) => {
     const ws = await refreshWorkspaces();
-    if (opts?.removed) setSelectedId(ws[0]?.workspaceId ?? null);
+    if (opts?.removed) {
+      navigate(
+        { view: 'workspace', workspaceId: ws[0]?.workspaceId ?? null, tab: 'timeline' },
+        { replace: true },
+      );
+    }
   };
 
   return (
@@ -317,11 +356,10 @@ export default function App() {
         workspaces={shownWorkspaces}
         selectedId={selected?.workspaceId ?? null}
         view={view}
-        onSelect={(id) => {
-          setSelectedId(id);
-          setView('workspace');
-        }}
-        onSelectPersonal={() => setView('personal')}
+        onSelect={(id) =>
+          navigate({ view: 'workspace', workspaceId: id, tab: currentTab })
+        }
+        onSelectPersonal={() => navigate({ view: 'personal' })}
         onCreate={() => (demo ? (window.location.href = '/account/login') : setNewOpen(true))}
         onOpenAccount={() => setAccountOpen(true)}
       />
@@ -335,6 +373,10 @@ export default function App() {
             workspace={selected}
             onOpenSettings={() => setSettingsOpen(true)}
             onChanged={onChanged}
+            tab={currentTab}
+            onTabChange={(t) =>
+              navigate({ view: 'workspace', workspaceId: selected.workspaceId, tab: t })
+            }
           />
         ) : (
           <div className="flex h-full items-center justify-center p-6">
@@ -358,7 +400,7 @@ export default function App() {
             onOpenChange={setNewOpen}
             onCreated={(id) => {
               void refreshWorkspaces();
-              setSelectedId(id);
+              navigate({ view: 'workspace', workspaceId: id, tab: 'timeline' });
             }}
           />
           {selected && (
