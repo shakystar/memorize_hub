@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useRef } from 'react';
 
 import { ConnectTab } from '@/components/canvas/ConnectTab';
 import { TasksTab } from '@/components/canvas/TasksTab';
@@ -10,6 +10,7 @@ import { getWorkspaceTasks } from '@/lib/api';
 import { useLiveFeed } from '@/lib/live-feed';
 import { usePaginatedTimeline } from '@/lib/paginated-timeline';
 import type { TaskEntry } from '@/lib/domain';
+import { TABS, type Tab } from '@/lib/tabs';
 
 /**
  * The workspace main canvas: a tab bar over the memory views
@@ -20,39 +21,23 @@ import type { TaskEntry } from '@/lib/domain';
  * demo mode (the landing experience) — always badged, never silent.
  */
 
-type Tab = 'timeline' | 'tasks' | 'talk' | 'decisions' | 'sources' | 'connect';
-
-const TABS: Array<{ id: Tab; label: string; tbd?: boolean }> = [
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'tasks', label: 'Tasks' },
-  { id: 'talk', label: 'Talk', tbd: true },
-  { id: 'decisions', label: 'Decisions', tbd: true },
-  { id: 'sources', label: 'Sources', tbd: true },
-];
-
-/**
- * Timeline is the primary workspace landing, including the live product. `?tab=`
- * still wins (Connect excluded in demo - the commands would target a fake
- * workspace), and an empty live Timeline points users to Connect.
- */
-function initialTab(demo: boolean): Tab {
-  const wanted = new URLSearchParams(window.location.search).get('tab');
-  if (wanted === 'connect') return demo ? 'timeline' : 'connect';
-  if (TABS.some((t) => t.id === wanted)) return wanted as Tab;
-  return 'timeline';
-}
-
 export function WorkspaceCanvas({
   workspaceId,
   meEmail,
   demo,
+  tab,
+  onTabChange,
 }: {
   workspaceId: string;
   meEmail: string;
   demo?: boolean;
+  tab: Tab;
+  onTabChange: (t: Tab) => void;
 }) {
   const example = MOCK_ENABLED || demo;
-  const [tab, setTab] = useState<Tab>(() => initialTab(Boolean(demo)));
+  // demo has no Connect tab (its commands target a fake workspace), so even a
+  // forced URL entry is treated as timeline to avoid a blank screen.
+  const effectiveTab = demo && tab === 'connect' ? 'timeline' : tab;
   const badge = demo ? 'Example data' : MOCK_ENABLED ? 'Mock data - dev only' : undefined;
 
   // Both surfaces prefetch at mount, in parallel: by the time the Tasks tab is
@@ -71,10 +56,10 @@ export function WorkspaceCanvas({
           <span key={t.id} className="flex items-stretch gap-1">
             {t.tbd && !TABS[i - 1]?.tbd && <span className="my-2 mx-1 w-px bg-border" />}
             <button
-              onClick={() => setTab(t.id)}
+              onClick={() => onTabChange(t.id)}
               className={cn(
                 '-mb-px flex items-center gap-1 border-b-2 px-3 py-2 text-sm',
-                tab === t.id
+                effectiveTab === t.id
                   ? 'border-primary font-medium text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground',
               )}
@@ -90,10 +75,10 @@ export function WorkspaceCanvas({
         ))}
         {!demo && (
           <button
-            onClick={() => setTab('connect')}
+            onClick={() => onTabChange('connect')}
             className={cn(
               '-mb-px ml-auto flex items-center border-b-2 px-3 py-2 text-sm',
-              tab === 'connect'
+              effectiveTab === 'connect'
                 ? 'border-primary font-medium text-foreground'
                 : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
@@ -104,8 +89,8 @@ export function WorkspaceCanvas({
       </nav>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-        {tab === 'connect' && !demo && <ConnectTab workspaceId={workspaceId} />}
-        {tab === 'timeline' && (
+        {effectiveTab === 'connect' && !demo && <ConnectTab workspaceId={workspaceId} />}
+        {effectiveTab === 'timeline' && (
           <TimelineTab
             items={example ? MOCK_TIMELINE : timeline.items}
             meEmail={meEmail}
@@ -120,12 +105,12 @@ export function WorkspaceCanvas({
               ) : !example && timeline.error ? (
                 <TimelineStatus title="Timeline unavailable" detail={timeline.error} />
               ) : (
-                <TimelineEmptyState onConnect={() => setTab('connect')} />
+                <TimelineEmptyState onConnect={() => onTabChange('connect')} />
               )
             }
           />
         )}
-        {tab === 'talk' && (
+        {effectiveTab === 'talk' && (
           <ComingSoon title="Talk">
             Talk to this workspace&apos;s agents. A message you write here becomes an event in
             the shared log; each member&apos;s agent pulls it on its next sync and picks it up
@@ -133,7 +118,7 @@ export function WorkspaceCanvas({
             Leave-a-message first, realtime later.
           </ComingSoon>
         )}
-        {tab === 'tasks' && (
+        {effectiveTab === 'tasks' && (
           <TasksTab
             tasks={example ? MOCK_TASKS : tasks.items}
             badge={badge}
@@ -148,12 +133,12 @@ export function WorkspaceCanvas({
             }
           />
         )}
-        {tab === 'decisions' && (
+        {effectiveTab === 'decisions' && (
           <ComingSoon title="Decisions">
             The decision log — every accepted decision with its history, including what it replaced.
           </ComingSoon>
         )}
-        {tab === 'sources' && (
+        {effectiveTab === 'sources' && (
           <ComingSoon title="Sources">
             The files behind the memories. When a memory says &ldquo;see the pricing doc&rdquo;, the
             doc itself lives here — uploaded once, then fetchable on demand by any member or their
