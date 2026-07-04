@@ -18,7 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { getMe, listWorkspaces, type Me, type Workspace } from '@/lib/api';
 import { MOCK_ENABLED, MOCK_ME, MOCK_WORKSPACES } from '@/lib/mock';
-import { useAppLocation } from '@/lib/use-app-location';
+import { toPath, useAppLocation } from '@/lib/use-app-location';
 import type { Tab } from '@/lib/tabs';
 
 function Sidebar({
@@ -324,6 +324,10 @@ export default function App() {
         { view: 'workspace', workspaceId: first.workspaceId, tab: route.tab },
         { replace: true },
       );
+    } else if (toPath(route) !== window.location.pathname) {
+      // Canonicalize a valid-but-non-canonical URL (tabless /app/:id, or an
+      // unknown tab segment that parse already normalized to timeline).
+      navigate(route, { replace: true });
     }
   }, [me, shownWorkspaces, route, navigate]);
 
