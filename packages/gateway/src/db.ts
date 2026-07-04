@@ -181,6 +181,25 @@ const MIGRATIONS: ReadonlyArray<(db: Database.Database) => void> = [
       CREATE INDEX IF NOT EXISTS idx_source_stores_account ON source_stores(account_id);
     `);
   },
+  // v6 — derived-artifact sidecar stores (spec 2026-07-04-derived-sidecar-store,
+  // docs/protocol/derived-store.md). A der_ store holds regenerable artifacts
+  // (embeddings first) keyed to a PARENT source store's raw event ids. It has NO
+  // memberships — authorize() resolves the parent and inherits its ACL (H030).
+  // No FK on parent_store_id: the parent may be a wsp_ (stores) OR a psm_
+  // (personal_stores), so the reference is validated at authorize time, not by SQL.
+  // Control-plane metadata only; the vectors live opaque in the relay (H010).
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS derived_stores (
+        parent_store_id TEXT NOT NULL,
+        artifact_kind   TEXT NOT NULL,
+        store_id        TEXT NOT NULL UNIQUE,
+        created_at      TEXT NOT NULL,
+        PRIMARY KEY (parent_store_id, artifact_kind)
+      );
+      CREATE INDEX IF NOT EXISTS idx_derived_store_id ON derived_stores(store_id);
+    `);
+  },
 ];
 
 function runMigrations(db: Database.Database): void {

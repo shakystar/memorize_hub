@@ -9,7 +9,7 @@ import { createHash, randomBytes } from 'node:crypto';
  */
 
 /** Server-minted id namespaces. `req_` (legacy access-request) is retired (H080). */
-export type IdKind = 'acc' | 'tok' | 'wsp' | 'inv' | 'psm';
+export type IdKind = 'acc' | 'tok' | 'wsp' | 'inv' | 'psm' | 'der';
 
 /** Random id with a typed prefix, e.g. `wsp_1a2b…`. */
 export function newId(kind: IdKind): string {
@@ -30,6 +30,7 @@ export function isValidStoreId(id: string): boolean {
 const PERSONAL_STORE_PREFIX = 'psm_';
 const WORKSPACE_STORE_PREFIX = 'wsp_';
 const INVITE_PREFIX = 'inv_';
+const DERIVED_STORE_PREFIX = 'der_';
 
 export function isPersonalStoreId(id: string): boolean {
   return id.startsWith(PERSONAL_STORE_PREFIX);
@@ -37,6 +38,10 @@ export function isPersonalStoreId(id: string): boolean {
 
 export function isWorkspaceStoreId(id: string): boolean {
   return id.startsWith(WORKSPACE_STORE_PREFIX);
+}
+
+export function isDerivedStoreId(id: string): boolean {
+  return id.startsWith(DERIVED_STORE_PREFIX);
 }
 
 /**
@@ -48,7 +53,8 @@ export function isReservedId(id: string): boolean {
   return (
     id.startsWith(PERSONAL_STORE_PREFIX) ||
     id.startsWith(WORKSPACE_STORE_PREFIX) ||
-    id.startsWith(INVITE_PREFIX)
+    id.startsWith(INVITE_PREFIX) ||
+    id.startsWith(DERIVED_STORE_PREFIX)
   );
 }
 

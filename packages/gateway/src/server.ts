@@ -11,7 +11,7 @@ import type { GatewayContext } from './context.js';
 import { handleDeviceCode, handleDeviceToken } from './device-api.js';
 import { sendError, sendJson } from './http.js';
 import { handleSpa, isSpaPath } from './spa.js';
-import { handleEventsProxy, handlePersonalStore } from './proxy.js';
+import { handleDerivedStore, handleEventsProxy, handlePersonalStore } from './proxy.js';
 import { handleWorkspaceTasks, handleWorkspaceTimeline } from './timeline.js';
 import {
   createWorkspace,
@@ -56,6 +56,7 @@ const WS_SOURCE_STORES = /^\/v1\/workspaces\/([^/]+)\/source-stores$/;
 const WS_INVITES = /^\/v1\/workspaces\/([^/]+)\/invites$/;
 const WS_INVITE_ID = /^\/v1\/workspaces\/([^/]+)\/invites\/([^/]+)$/;
 const WS_MEMBER = /^\/v1\/workspaces\/([^/]+)\/members\/([^/]+)$/;
+const DERIVED_STORE = /^\/v1\/stores\/([^/]+)\/derived\/([^/]+)$/;
 
 export interface GatewayServerOptions {
   db: GatewayContext['db'];
@@ -112,6 +113,10 @@ async function route(
   // --- account discovery (API key) --------------------------------------
   if (method === 'GET' && p === '/v1/account') return handleAccountWhoami(req, res, ctx);
   if (method === 'GET' && p === '/v1/account/personal-store') return handlePersonalStore(req, res, ctx);
+  const derived = DERIVED_STORE.exec(p);
+  if (derived && method === 'GET') {
+    return handleDerivedStore(req, res, ctx, decode(derived[1]), decode(derived[2]));
+  }
   if (method === 'GET' && p === '/v1/account/workspaces') return listWorkspaces(req, res, ctx);
   if (method === 'GET' && p === '/v1/account/keys') return handleAccountKeysList(req, res, ctx);
   if (method === 'POST' && p === '/v1/account/keys') return handleAccountKeyIssue(req, res, ctx);

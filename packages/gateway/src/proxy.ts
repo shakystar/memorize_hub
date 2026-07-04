@@ -2,12 +2,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { GatewayContext } from './context.js';
 import { readBody, sendError, sendJson } from './http.js';
-import { isValidStoreId } from './ids.js';
+import { isPersonalStoreId, isValidStoreId, isWorkspaceStoreId } from './ids.js';
 import { touchToken } from './keys.js';
 import { getOrCreatePersonalStore } from './personal-store.js';
 import { authorize } from './policy.js';
 import { resolveKeyPrincipal } from './principal.js';
 import { recordUsage } from './usage.js';
+import { getOrCreateDerivedStore, isArtifactKind } from './derived-stores.js';
 
 /**
  * Data-plane reverse proxy to the dumb relay (docs/protocol/transport.md +
@@ -108,6 +109,51 @@ export function handlePersonalStore(
     return;
   }
   const { storeId } = getOrCreatePersonalStore(ctx.db, principal.accountId);
+  if (principal.tokenId) touchToken(ctx.db, principal.tokenId);
+  sendJson(res, 200, { storeId, eventsUrl: `/v1/projects/${storeId}/events` });
+}
+
+/**
+ * GET /v1/stores/:parentStoreId/derived/:artifactKind — resolve (or provision on
+ * first call) the sidecar store that carries a regenerable artifact for a parent
+ * source store (spec 2026-07-04-derived-sidecar-store; docs/protocol/derived-store.md).
+ * Discovery only needs READ on the parent; pushing derived events to the returned
+ * der_ store is separately gated at the events proxy, where authorize() delegates
+ * to the parent (write => non-read-only member ∩ key scope).
+ */
+export function handleDerivedStore(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: GatewayContext,
+  parentStoreId: string,
+  artifactKind: string,
+): void {
+  const principal = resolveKeyPrincipal(ctx.db, req);
+  if (!principal) {
+    sendError(res, 401, 'missing or invalid API key');
+    return;
+  }
+  if (!isValidStoreId(parentStoreId)) {
+    sendError(res, 400, 'invalid store id');
+    return;
+  }
+  // A sidecar's parent must be a real source store (workspace or personal) — never
+  // another der_ (which would chain bindings and break authorize()'s depth-1
+  // invariant) nor a control-plane-only id (inv_/acc_/tok_).
+  if (!isWorkspaceStoreId(parentStoreId) && !isPersonalStoreId(parentStoreId)) {
+    sendError(res, 400, 'invalid parent store id');
+    return;
+  }
+  if (!isArtifactKind(artifactKind)) {
+    sendError(res, 400, 'unknown artifact kind');
+    return;
+  }
+  const decision = authorize(ctx.db, principal, { kind: 'store', storeId: parentStoreId }, 'read');
+  if (!decision.ok) {
+    sendError(res, decision.status, decision.error ?? 'forbidden');
+    return;
+  }
+  const { storeId } = getOrCreateDerivedStore(ctx.db, parentStoreId, artifactKind);
   if (principal.tokenId) touchToken(ctx.db, principal.tokenId);
   sendJson(res, 200, { storeId, eventsUrl: `/v1/projects/${storeId}/events` });
 }

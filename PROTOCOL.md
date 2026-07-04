@@ -21,6 +21,7 @@ conventions (identifiers, auth principal, `read_only`/scope, status codes,
 | [`docs/protocol/account.md`](./docs/protocol/account.md) | `GET /v1/account` identity echo (whoami) | gateway (control) |
 | [`docs/protocol/personal-store.md`](./docs/protocol/personal-store.md) | `GET /v1/account/personal-store` (`psm_`) | gateway (control) |
 | [`docs/protocol/workspace.md`](./docs/protocol/workspace.md) | `wsp_` create / invite / join / membership / roles | gateway (control) |
+| [`docs/protocol/derived-store.md`](./docs/protocol/derived-store.md) | `GET /v1/stores/:parentStoreId/derived/:artifactKind` derived artifact sidecar (`der_`) provisioning | gateway (control) |
 
 Only `transport.md` is served by a **bare relay** (no gateway). The rest are
 gateway control-plane; the relay knows nothing of accounts, stores, or prefixes
