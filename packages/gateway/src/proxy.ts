@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { GatewayContext } from './context.js';
 import { readBody, sendError, sendJson } from './http.js';
-import { isValidStoreId } from './ids.js';
+import { isPersonalStoreId, isValidStoreId, isWorkspaceStoreId } from './ids.js';
 import { touchToken } from './keys.js';
 import { getOrCreatePersonalStore } from './personal-store.js';
 import { authorize } from './policy.js';
@@ -135,6 +135,13 @@ export function handleDerivedStore(
   }
   if (!isValidStoreId(parentStoreId)) {
     sendError(res, 400, 'invalid store id');
+    return;
+  }
+  // A sidecar's parent must be a real source store (workspace or personal) — never
+  // another der_ (which would chain bindings and break authorize()'s depth-1
+  // invariant) nor a control-plane-only id (inv_/acc_/tok_).
+  if (!isWorkspaceStoreId(parentStoreId) && !isPersonalStoreId(parentStoreId)) {
+    sendError(res, 400, 'invalid parent store id');
     return;
   }
   if (!isArtifactKind(artifactKind)) {

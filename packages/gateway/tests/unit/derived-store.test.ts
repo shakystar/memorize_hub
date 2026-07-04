@@ -46,6 +46,13 @@ describe('GET /v1/stores/:parent/derived/:kind discovery', () => {
     expect((await discover(aliceKey, 'bad/id', 'embedding')).status).toBe(400);
   });
 
+  it('400s a well-formed but non-{wsp_,psm_} parent (e.g. a der_ id)', async () => {
+    // der_ is path-valid but not a legal parent — a sidecar must hang off a real
+    // source store, never off another sidecar (authorize depth-1 invariant).
+    expect((await discover(aliceKey, 'der_notaparent', 'embedding')).status).toBe(400);
+    expect((await discover(aliceKey, 'inv_notaparent', 'embedding')).status).toBe(400);
+  });
+
   it('400s an unknown artifact kind', async () => {
     expect((await discover(aliceKey, wsp, 'bogus')).status).toBe(400);
   });
