@@ -60,12 +60,17 @@ describe('share landing (/clone/:storeId)', () => {
     });
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain('npm i -g @shakystar/memorize');
     expect(html).toContain('memorize login https://hub.example');
-    expect(html).toContain(`memorize clone https://hub.example/clone/${storeId}`);
-    expect(html).toContain(`memorize remote https://hub.example/clone/${storeId}`);
+    expect(html).toContain(`memorize connect https://hub.example/clone/${storeId}`);
+    // The separate clone/remote blocks and the manual install line are gone.
+    expect(html).not.toContain('npm i -g @shakystar/memorize');
+    expect(html).not.toContain(`memorize clone https://hub.example/clone/${storeId}`);
+    expect(html).not.toContain(`memorize remote https://hub.example/clone/${storeId}`);
+    // Agent-guided setup replaces the manual install.
+    expect(html).toContain(
+      'https://github.com/shakystar/memorize/blob/main/guides/AI_SETUP.md',
+    );
     expect(html).toContain('demo'); // the workspace name headlines the page
-    // No manual sync in onboarding copy — connecting is enough (auto-sync note instead).
     expect(html).not.toContain('memorize project sync');
     expect(html).toContain('sync runs automatically at session boundaries');
   });

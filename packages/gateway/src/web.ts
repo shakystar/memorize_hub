@@ -63,6 +63,22 @@ import {
 /** OIDC scopes for account login: verified email + stable sub, plus profile. */
 const ACCOUNT_SCOPE = 'openid email profile';
 
+const SETUP_GUIDE_URL =
+  'https://github.com/shakystar/memorize/blob/main/guides/AI_SETUP.md';
+
+/**
+ * The canonical Hub onboarding snippet: `login` + `connect` (which auto-branches
+ * clone/remote), then a single line the user pastes to their AI agent for
+ * install + env wiring. Replaces the old npm-install + separate clone/remote
+ * blocks everywhere it is used.
+ */
+function onboardingCommands(origin: string, cloneUrl: string): string {
+  return `${cmdBlock(`memorize login ${origin}`)}
+${cmdBlock(`memorize connect ${cloneUrl}`)}
+<p class="mt-3 text-sm prose-muted">Or hand setup to your AI agent — paste this to your coding agent:</p>
+${cmdBlock(`Follow this guide to set up memorize in this project: ${SETUP_GUIDE_URL}`)}`;
+}
+
 /** Short-lived cookie carrying a pending /join invite token across OAuth login. */
 const JOIN_COOKIE = 'hub_join';
 function setJoinCookie(token: string): string {
@@ -118,10 +134,8 @@ export function handleLanding(req: IncomingMessage, res: ServerResponse, ctx: Ga
 </section>
 
 <section class="mt-6">
- <p class="text-sm prose-muted mb-1">Connect a machine once, then clone any project:</p>
- ${cmdBlock('npm i -g @shakystar/memorize')}
- ${cmdBlock(`memorize login ${origin}`)}
- ${cmdBlock(`memorize clone ${origin}/clone/PROJECT_ID`)}
+ <p class="text-sm prose-muted mb-1">Connect a machine, then let memorize sync every project:</p>
+ ${onboardingCommands(origin, `${origin}/clone/PROJECT_ID`)}
  <p class="mt-2 text-sm prose-muted">From there, sync runs automatically at session boundaries.</p>
 </section>
 
@@ -190,21 +204,19 @@ const DOC_PAGES: DocPage[] = [
     section: 'Getting started',
     render: (o) => `<h1 class="${H1}">Quickstart</h1>
 <p class="${P}">Sync a project across two machines in three steps.</p>
-<h2 class="${H2}">1. Install memorize</h2>
-${cmdBlock('npm i -g @shakystar/memorize')}
-<h2 class="${H2}">2. Log in once per machine</h2>
+<h2 class="${H2}">1. Log in once per machine</h2>
 <p class="${P}">Opens your browser to approve the device — nothing to paste.</p>
 ${cmdBlock(`memorize login ${o}`)}
-<h2 class="${H2}">3. Clone the project</h2>
-<p class="${P}">Every workspace shows its clone URL in the
+<h2 class="${H2}">2. Connect the project</h2>
+<p class="${P}">Every workspace shows its URL in the
  <a href="/app" class="text-accent hover:underline">dashboard</a>.
- <code class="font-mono">clone</code> stores the remote and pulls once — use it, not
- <code class="font-mono">init</code>, which forks a new empty project that will not sync.</p>
-${cmdBlock(`memorize clone ${o}/clone/PROJECT_ID`)}
-<h2 class="${H2}">Already have the project locally?</h2>
-<p class="${P}">Run steps 1–2, then attach the remote instead of cloning — it pushes and pulls
- once right away.</p>
-${cmdBlock(`memorize remote ${o}/clone/PROJECT_ID`)}
+ <code class="font-mono">connect</code> clones into a fresh directory or attaches to a
+ project you already have locally — it picks the right one automatically.</p>
+${cmdBlock(`memorize connect ${o}/clone/PROJECT_ID`)}
+<h2 class="${H2}">Prefer to let your AI agent set it up?</h2>
+<p class="${P}">Paste this to your coding agent — it installs memorize and wires the
+ environment for you:</p>
+${cmdBlock(`Follow this guide to set up memorize in this project: ${SETUP_GUIDE_URL}`)}
 <p class="mt-6 text-sm prose-muted">That's it. After connecting, sync runs automatically at
  session boundaries — no manual sync in day-to-day use.</p>`,
   },
@@ -255,12 +267,12 @@ ${cmdBlock(`memorize remote ${o}/clone/PROJECT_ID`)}
 <h2 class="${H2}">memorize login</h2>
 <p class="${P}">Connect a machine to a Hub — opens your browser to approve the device.</p>
 ${cmdBlock(`memorize login ${o}`)}
-<h2 class="${H2}">memorize clone</h2>
-<p class="${P}">Copy a project from its share URL: stores the remote and does the first pull.</p>
-${cmdBlock(`memorize clone ${o}/clone/PROJECT_ID`)}
-<h2 class="${H2}">memorize remote</h2>
-<p class="${P}">Attach a remote to a project you already have locally, then push and pull once.</p>
-${cmdBlock(`memorize remote ${o}/clone/PROJECT_ID`)}
+<h2 class="${H2}">memorize connect</h2>
+<p class="${P}">Connect a project from its share URL: clones into a fresh directory or
+ attaches a remote to a project you already have locally — whichever fits, chosen
+ automatically. (<code class="font-mono">clone</code> and <code class="font-mono">remote</code>
+ remain as explicit aliases.)</p>
+${cmdBlock(`memorize connect ${o}/clone/PROJECT_ID`)}
 <h2 class="${H2}">Manual sync</h2>
 <p class="${P}">After connecting, sync runs automatically at session boundaries — there is no
  shortcut alias. To force a pass:</p>
@@ -825,14 +837,8 @@ export function handleJoinPage(
   const body = `<h1 class="text-2xl font-bold">Workspace joined</h1>
 <p class="mt-2 prose-muted">${verb} <strong class="text-fg">${name}</strong>
  (<code class="font-mono">${htmlEscape(result.storeId)}</code>).</p>
-<p class="mt-4 text-sm prose-muted">Join from a new machine:</p>
-${cmdBlock('npm i -g @shakystar/memorize')}
-${cmdBlock(`memorize login ${origin}`)}
-${cmdBlock(`memorize clone ${origin}/clone/${result.storeId}`)}
-<p class="mt-3 text-sm prose-muted">Already have the project locally?</p>
-${cmdBlock('npm i -g @shakystar/memorize')}
-${cmdBlock(`memorize login ${origin}`)}
-${cmdBlock(`memorize remote ${origin}/clone/${result.storeId}`)}
+<p class="mt-4 text-sm prose-muted">Connect from any machine:</p>
+${onboardingCommands(origin, `${origin}/clone/${result.storeId}`)}
 <p class="mt-3 text-sm prose-muted">After connecting, sync runs automatically at session boundaries.</p>
 <p class="mt-4"><a href="/app" class="btn btn-primary">Open the app</a></p>
 ${copyScript()}`;
@@ -882,14 +888,8 @@ export function handleClonePage(
 <p class="mt-2 prose-muted">Run these on the machine you want to sync
  (<code class="font-mono">${htmlEscape(storeId)}</code>):</p>
 <div class="mt-4">
-${cmdBlock('npm i -g @shakystar/memorize')}
-${cmdBlock(`memorize login ${origin}`)}
-${cmdBlock(`memorize clone ${cloneUrl}`)}
+${onboardingCommands(origin, cloneUrl)}
 </div>
-<p class="mt-3 text-sm prose-muted">Already have the project locally?</p>
-${cmdBlock('npm i -g @shakystar/memorize')}
-${cmdBlock(`memorize login ${origin}`)}
-${cmdBlock(`memorize remote ${cloneUrl}`)}
 <p class="mt-3 text-sm prose-muted">After connecting, sync runs automatically at session boundaries.</p>
 ${copyScript()}`;
   sendHtml(res, 200, layout({ title: `Memorize Hub — clone ${name}`, body, user: session }));
