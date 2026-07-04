@@ -34,6 +34,8 @@ export async function handleWorkspaceTimeline(
   const params = new URLSearchParams();
   const limit = query.get('limit');
   if (limit !== null) params.set('limit', limit);
+  const before = query.get('before');
+  if (before !== null) params.set('before', before);
   return forwardReplicaRead(req, res, ctx, storeId, 'timeline', params);
 }
 
