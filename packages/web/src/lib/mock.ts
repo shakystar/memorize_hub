@@ -151,7 +151,7 @@ export const MOCK_TASKS: TaskEntry[] = [
     goal: 'Choosing a tier on the pricing page creates a real subscription.',
     acceptanceCriteria: ['Checkout succeeds for both paid tiers', 'Webhook updates the account plan'],
     openQuestions: ['Trial length: 7 or 14 days?'],
-    dependsOn: ['task_01'],
+    dependsOn: ['task_08'],
     ...myApp,
   },
   {
@@ -168,8 +168,10 @@ export const MOCK_TASKS: TaskEntry[] = [
     ownerType: 'unassigned', ...myWeb,
   },
   {
-    id: 'task_06', at: at(2, 14, 0), createdAt: at(2, 14, 0), status: 'todo', priority: 'low',
-    title: 'Collect testimonial quotes from beta users', ownerType: 'unassigned', ...kant,
+    id: 'task_06', at: at(1, 8, 0), createdAt: at(1, 8, 0), status: 'todo', priority: 'low',
+    title: 'Collect testimonial quotes from beta users', ownerType: 'unassigned',
+    dependsOn: ['task_09'],
+    ...kant,
   },
   {
     id: 'task_07', at: at(1, 16, 45), createdAt: at(2, 9, 0), startedAt: at(2, 9, 30),
