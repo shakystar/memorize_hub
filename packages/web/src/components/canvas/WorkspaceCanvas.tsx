@@ -112,7 +112,7 @@ export function WorkspaceCanvas({
             badge={badge}
             hasMore={example ? false : timeline.hasMore}
             loadingOlder={example ? false : timeline.loadingOlder}
-            onLoadOlder={timeline.loadOlder}
+            onLoadOlder={example ? () => {} : timeline.loadOlder}
             scrollParentRef={scrollRef}
             emptyState={
               !example && timeline.loading ? (

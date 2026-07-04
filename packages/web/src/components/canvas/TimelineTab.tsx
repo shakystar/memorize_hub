@@ -39,7 +39,7 @@ export function TimelineTab({
   const anchorHeight = useRef<number | null>(null);
 
   const members = useMemo(() => [...new Set(items.map((i) => i.member))], [items]);
-  const visible = member ? items.filter((i) => i.member === member) : items;
+  const visible = useMemo(() => (member ? items.filter((i) => i.member === member) : items), [items, member]);
   const days = useMemo(() => groupByDay(visible), [visible]);
 
   // Bottom-anchor ONLY on first paint and when a new newest-tail arrives — never
