@@ -7,6 +7,8 @@ import {
   getOrCreateDerivedStore,
   isArtifactKind,
 } from '../../src/derived-stores.js';
+import { upsertAccountByEmail } from '../../src/accounts.js';
+import { createStore, deleteStore } from '../../src/stores.js';
 
 const db = openGatewayDb(':memory:');
 
@@ -63,5 +65,15 @@ describe('deleteDerivedStores', () => {
     const { storeId } = getOrCreateDerivedStore(db, 'wsp_parentE', 'embedding');
     deleteDerivedStores(db, 'wsp_parentE');
     expect(getDerivedStoreParent(db, storeId)).toBeNull();
+  });
+});
+
+describe('deleteStore cascade', () => {
+  it("drops the parent store's sidecar bindings", () => {
+    const owner = upsertAccountByEmail(db, 'teardown@derived.example');
+    const { storeId: parent } = createStore(db, owner, 'to-delete');
+    const der = getOrCreateDerivedStore(db, parent, 'embedding').storeId;
+    deleteStore(db, parent);
+    expect(getDerivedStoreParent(db, der)).toBeNull();
   });
 });
