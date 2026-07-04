@@ -201,9 +201,10 @@ card can show the next action without a second fetch.
   (pre-Phase-0) pass through unresolved; the gateway does not guess.
 - The domain defaults `description`/`goal` to `''` and list fields to `[]` —
   absent, not filled — so the wire omits them.
+- `createdAt`/`startedAt` (derived from task-lifecycle events, first `in_progress` transition) / `dependsOn` are for the Tasks workflow timeline view (H060); the gateway passes them through unmodified.
 
 Response `200`: `{ "storeId": "...", "pulled": {...}, "items": [ { "id", "at",
-"member", "writer"?, "sourceProjectId"?, "sourceProjectLabel"?, "title",
+"createdAt", "startedAt"?, "dependsOn"?, "member", "writer"?, "sourceProjectId"?, "sourceProjectLabel"?, "title",
 "status", "priority", "ownerType", "description"?, "goal"?,
 "acceptanceCriteria"?, "openQuestions"?, "riskNotes"?,
 "handoff"?: { "summary", "nextAction", "doneItems"?, "remainingItems"? } } ] }`.
