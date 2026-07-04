@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import type { DomainTimelineItem, TimelineItem } from '@/lib/domain';
@@ -15,6 +15,10 @@ export function TimelineTab({
   meEmail,
   badge,
   emptyState,
+  hasMore,
+  loadingOlder,
+  onLoadOlder,
+  scrollParentRef,
 }: {
   items: TimelineItem[];
   /** The signed-in member — their items render on the right, unnamed. */
@@ -22,17 +26,66 @@ export function TimelineTab({
   /** Set when the feed is example data (dev mock / anonymous demo) — always badged, never silent. */
   badge?: string;
   emptyState: ReactNode;
+  hasMore: boolean;
+  loadingOlder: boolean;
+  onLoadOlder: () => void;
+  scrollParentRef: RefObject<HTMLDivElement | null>;
 }) {
   const [member, setMember] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
+  const didInitialScroll = useRef(false);
+  const lastNewestId = useRef<string | undefined>(undefined);
+  const anchorHeight = useRef<number | null>(null);
 
   const members = useMemo(() => [...new Set(items.map((i) => i.member))], [items]);
-  const visible = member ? items.filter((i) => i.member === member) : items;
+  const visible = useMemo(() => (member ? items.filter((i) => i.member === member) : items), [items, member]);
   const days = useMemo(() => groupByDay(visible), [visible]);
 
+  // Bottom-anchor ONLY on first paint and when a new newest-tail arrives — never
+  // on an older-page prepend (which changes the oldest item, not the newest).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [visible.length]);
+    if (visible.length === 0) return;
+    const newestId = visible[visible.length - 1]?.id;
+    if (!didInitialScroll.current) {
+      bottomRef.current?.scrollIntoView({ block: 'end' });
+      didInitialScroll.current = true;
+      lastNewestId.current = newestId;
+      return;
+    }
+    if (newestId !== lastNewestId.current) {
+      bottomRef.current?.scrollIntoView({ block: 'end' });
+      lastNewestId.current = newestId;
+    }
+  }, [visible]);
+
+  // Preserve the viewport anchor across an older-page prepend: restore the
+  // scroll delta the new content pushed down.
+  useLayoutEffect(() => {
+    const parent = scrollParentRef.current;
+    if (parent && anchorHeight.current !== null) {
+      parent.scrollTop += parent.scrollHeight - anchorHeight.current;
+      anchorHeight.current = null;
+    }
+  }, [visible, scrollParentRef]);
+
+  // Load older when the top sentinel nears the viewport top.
+  useEffect(() => {
+    const parent = scrollParentRef.current;
+    const sentinel = topRef.current;
+    if (!parent || !sentinel || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !loadingOlder) {
+          anchorHeight.current = parent.scrollHeight; // capture BEFORE prepend
+          onLoadOlder();
+        }
+      },
+      { root: parent, rootMargin: '200px 0px 0px 0px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [scrollParentRef, hasMore, loadingOlder, onLoadOlder]);
 
   if (items.length === 0) return <>{emptyState}</>;
 
@@ -55,6 +108,15 @@ export function TimelineTab({
         ))}
       </div>
 
+      <div ref={topRef} />
+      {/* Reserve a constant-height slot while older pages remain, so toggling the
+          in-flight indicator never shifts layout (the anchor effect only runs on
+          an items change, not on a loadingOlder toggle). */}
+      {hasMore && (
+        <div className="flex h-8 items-center justify-center">
+          {loadingOlder && <p className="text-xs text-muted-foreground">Loading older…</p>}
+        </div>
+      )}
       {days.map(([label, dayItems]) => (
         <section key={label}>
           <div className="flex items-center gap-3 py-3">
