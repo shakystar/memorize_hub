@@ -109,8 +109,13 @@ export function TimelineTab({
       </div>
 
       <div ref={topRef} />
-      {loadingOlder && (
-        <p className="py-2 text-center text-xs text-muted-foreground">Loading older…</p>
+      {/* Reserve a constant-height slot while older pages remain, so toggling the
+          in-flight indicator never shifts layout (the anchor effect only runs on
+          an items change, not on a loadingOlder toggle). */}
+      {hasMore && (
+        <div className="flex h-8 items-center justify-center">
+          {loadingOlder && <p className="text-xs text-muted-foreground">Loading older…</p>}
+        </div>
       )}
       {days.map(([label, dayItems]) => (
         <section key={label}>
