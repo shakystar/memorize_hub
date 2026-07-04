@@ -1,7 +1,7 @@
 import { createServer, type Server, type ServerResponse } from 'node:http';
 
 import { readTasks } from './tasks.js';
-import { readTimeline } from './timeline.js';
+import { decodeCursor, readTimeline, type TimelineCursor } from './timeline.js';
 
 export interface ReplicaServerOptions {
   relayUrl: string;
@@ -35,11 +35,22 @@ export function createReplicaServer(options: ReplicaServerOptions): Server {
           sendJson(res, 400, { error: 'limit must be a positive integer' });
           return;
         }
+        const rawBefore = url.searchParams.get('before');
+        let before: TimelineCursor | undefined;
+        if (rawBefore !== null) {
+          try {
+            before = decodeCursor(rawBefore);
+          } catch {
+            sendJson(res, 400, { error: 'before must be a valid cursor' });
+            return;
+          }
+        }
         const result = await readTimeline({
           hubUrl: options.relayUrl,
           apiKey: options.relayToken ?? '',
           workspaceId: decodeURIComponent(timeline[1] ?? ''),
           ...(limit !== undefined ? { limit } : {}),
+          ...(before ? { before } : {}),
         });
         sendJson(res, 200, result);
         return;

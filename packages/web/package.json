@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm lint"
+    "check": "pnpm typecheck && pnpm lint && pnpm test"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.1.1",
@@ -45,6 +45,6 @@
     "tw-animate-css": "^1.3.0",
     "typescript": "^6.0.2",
     "vite": "^7.0.0",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.8"
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parse, toPath, type Route } from '@/lib/use-app-location';
+import { parse, toPath, type Route } from '../../src/lib/use-app-location';
 
 describe('parse', () => {
   it('bare /app → workspace, null id, timeline', () => {

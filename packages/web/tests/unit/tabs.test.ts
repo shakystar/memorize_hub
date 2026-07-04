@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isTab } from '@/lib/tabs';
+import { isTab } from '../../src/lib/tabs';
 
 describe('isTab', () => {
   it('accepts every real tab, including connect', () => {

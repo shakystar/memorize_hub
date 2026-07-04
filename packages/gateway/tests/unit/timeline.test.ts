@@ -104,6 +104,8 @@ beforeAll(async () => {
           sourceProjectLabel: 'proj_unregistered',
         },
       ],
+      hasMore: true,
+      nextCursor: 'CURSOR_ABC',
     }));
   });
   await new Promise<void>((resolve) => replica.listen(0, '127.0.0.1', resolve));
@@ -190,6 +192,18 @@ describe('workspace timeline endpoint', () => {
       writer: 'system',
       sourceProjectLabel: 'proj_unregistered',
     });
+  });
+
+  it('forwards the before cursor and preserves hasMore/nextCursor through labeling', async () => {
+    const res = await fetch(`${base}/v1/workspaces/${storeId}/timeline?limit=2&before=CURSOR_ABC`, {
+      headers: auth(aliceKey),
+    });
+    expect(res.status).toBe(200);
+    expect(replicaRequests.at(-1)).toContain('before=CURSOR_ABC');
+    expect(replicaRequests.at(-1)).toContain('limit=2');
+    const body = (await res.json()) as { hasMore: boolean; nextCursor?: string };
+    expect(body.hasMore).toBe(true);
+    expect(body.nextCursor).toBe('CURSOR_ABC');
   });
 });
 

@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 
 import { ConnectTab } from '@/components/canvas/ConnectTab';
 import { TasksTab } from '@/components/canvas/TasksTab';
@@ -6,9 +6,10 @@ import { TimelineTab } from '@/components/canvas/TimelineTab';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MOCK_ENABLED, MOCK_TASKS, MOCK_TIMELINE } from '@/lib/mock';
-import { getWorkspaceTasks, getWorkspaceTimeline } from '@/lib/api';
+import { getWorkspaceTasks } from '@/lib/api';
 import { useLiveFeed } from '@/lib/live-feed';
-import type { TaskEntry, TimelineItem } from '@/lib/domain';
+import { usePaginatedTimeline } from '@/lib/paginated-timeline';
+import type { TaskEntry } from '@/lib/domain';
 import { TABS, type Tab } from '@/lib/tabs';
 
 /**
@@ -42,9 +43,8 @@ export function WorkspaceCanvas({
   // Both surfaces prefetch at mount, in parallel: by the time the Tasks tab is
   // clicked its data has usually arrived, and cached items from an earlier
   // visit render instantly while the refresh runs (stale-while-revalidate).
-  const timeline = useLiveFeed<TimelineItem>(`hub:timeline:${workspaceId}`, !example, () =>
-    getWorkspaceTimeline(workspaceId).then((result) => result.items),
-  );
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const timeline = usePaginatedTimeline(workspaceId, !example);
   const tasks = useLiveFeed<TaskEntry>(`hub:tasks:${workspaceId}`, !example, () =>
     getWorkspaceTasks(workspaceId).then((result) => result.items),
   );
@@ -88,13 +88,17 @@ export function WorkspaceCanvas({
         )}
       </nav>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {effectiveTab === 'connect' && !demo && <ConnectTab workspaceId={workspaceId} />}
         {effectiveTab === 'timeline' && (
           <TimelineTab
             items={example ? MOCK_TIMELINE : timeline.items}
             meEmail={meEmail}
             badge={badge}
+            hasMore={example ? false : timeline.hasMore}
+            loadingOlder={example ? false : timeline.loadingOlder}
+            onLoadOlder={example ? () => {} : timeline.loadOlder}
+            scrollParentRef={scrollRef}
             emptyState={
               !example && timeline.loading ? (
                 <TimelineStatus title="Loading timeline" />
