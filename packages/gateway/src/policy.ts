@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 
-import { isPersonalStoreId, isWorkspaceStoreId } from './ids.js';
+import { isDerivedStoreId, isPersonalStoreId, isWorkspaceStoreId } from './ids.js';
+import { getDerivedStoreParent } from './derived-stores.js';
 import { tokenCoversStore } from './keys.js';
 import { getPersonalStoreOwner } from './personal-store.js';
 import type { Principal } from './principal.js';
@@ -55,6 +56,15 @@ export function authorize(
 
   if (resource.kind === 'store') {
     const { storeId } = resource;
+
+    // Derived sidecar store: no memberships of its own — resolve the parent and
+    // inherit its ACL wholesale (personal owner-only OR workspace membership∩scope).
+    // Recursion depth is 1: a parent is never itself a der_ store.
+    if (isDerivedStoreId(storeId)) {
+      const parent = getDerivedStoreParent(db, storeId);
+      if (!parent) return { ok: false, status: 403, error: 'unknown store' };
+      return authorize(db, principal, { kind: 'store', storeId: parent.parentStoreId }, action);
+    }
 
     // Personal store: owner-only, unscoped — no workspace membership involved
     // (personal-store.md §authorization). This is the privacy hard boundary.
