@@ -90,12 +90,18 @@ export type TimelineItem = DomainTimelineItem;
  * machine should do without a second fetch. Field names verbatim from the
  * entities; the domain defaults list fields to `[]` and the wire omits
  * empties. No due/start dates — the domain has none (a memorize-side
- * decision if a calendar/gantt view is ever wanted).
+ * `createdAt`은 항상, `startedAt`은 in_progress를 거친 경우 실린다(타임라인 뷰용).
  */
 export interface TaskEntry extends Provenance {
   id: string;
   /** ISO-8601 timestamp of the last status transition. */
   at: string;
+  /** ISO-8601 creation timestamp — the wait-segment start. */
+  createdAt: string;
+  /** ISO-8601 first `in_progress` transition; absent if the task never started. */
+  startedAt?: string;
+  /** Predecessor task ids. Omitted when empty. */
+  dependsOn?: string[];
   /** Owning workspace member (account email), server-resolved as in the timeline. */
   member: string;
   title: string;
