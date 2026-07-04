@@ -8,7 +8,7 @@ import { closeAll } from '@shakystar/memorize/dist/storage/db.js';
 import { readEvents } from '@shakystar/memorize/dist/storage/event-store.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { readTimeline } from '../../src/timeline.js';
+import { decodeCursor, encodeCursor, readTimeline } from '../../src/timeline.js';
 import { serverStoreId } from '../../src/workspace.js';
 
 const WSP = 'wsp_s2_timeline_test';
@@ -260,5 +260,91 @@ describe('readTimeline', () => {
         fetchImpl: fakeHub([], []),
       }),
     ).rejects.toThrow(/limit/);
+  });
+});
+
+// helper: N memory.consolidated events, 1 minute apart, ascending
+function manyMemoryEvents(storeId: string, n: number): DomainEvent[] {
+  const base = Date.parse('2026-07-03T00:00:00.000Z');
+  return Array.from({ length: n }, (_, i) => {
+    const at = new Date(base + i * 60_000).toISOString();
+    return {
+      id: `evt_mem_${String(i).padStart(3, '0')}`,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      createdAt: at,
+      updatedAt: at,
+      type: 'memory.consolidated',
+      projectId: storeId,
+      scopeType: 'project',
+      scopeId: storeId,
+      actor: 'user',
+      writer: ACC,
+      sourceProjectId: storeId,
+      payload: {
+        id: `mem_${String(i).padStart(3, '0')}`,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        createdAt: at,
+        updatedAt: at,
+        projectId: storeId,
+        kind: 'progress',
+        text: `memory ${i}`,
+        salience: 5,
+        sourceObservationIds: [],
+        tags: [],
+        importSource: 'hub-web',
+      },
+    } satisfies DomainEvent;
+  });
+}
+
+describe('readTimeline cursor windowing', () => {
+  it('round-trips a cursor and rejects a malformed one', () => {
+    const c = encodeCursor('2026-07-03T00:05:00.000Z', 'mem_005');
+    expect(decodeCursor(c)).toEqual({ at: '2026-07-03T00:05:00.000Z', id: 'mem_005' });
+    expect(() => decodeCursor('bm9waXBl')).toThrow(/cursor/); // base64url "nopipe", no '|'
+  });
+
+  it('returns the newest page with hasMore + nextCursor at the page floor', async () => {
+    const storeId = serverStoreId(WSP);
+    const res = await readTimeline({
+      hubUrl: 'http://hub.fake',
+      apiKey: 'mzk_fake',
+      workspaceId: WSP,
+      limit: 3,
+      fetchImpl: fakeHub(manyMemoryEvents(storeId, 10), []),
+    });
+    expect(res.items.map((i) => i.id)).toEqual(['mem_007', 'mem_008', 'mem_009']);
+    expect(res.hasMore).toBe(true);
+    expect(res.nextCursor).toBe(encodeCursor('2026-07-03T00:07:00.000Z', 'mem_007'));
+  });
+
+  it('pages strictly older than the cursor with no overlap', async () => {
+    const storeId = serverStoreId(WSP);
+    const res = await readTimeline({
+      hubUrl: 'http://hub.fake',
+      apiKey: 'mzk_fake',
+      workspaceId: WSP,
+      limit: 3,
+      before: { at: '2026-07-03T00:07:00.000Z', id: 'mem_007' },
+      fetchImpl: fakeHub(manyMemoryEvents(storeId, 10), []),
+    });
+    expect(res.items.map((i) => i.id)).toEqual(['mem_004', 'mem_005', 'mem_006']);
+    expect(res.hasMore).toBe(true);
+    expect(res.nextCursor).toBe(encodeCursor('2026-07-03T00:04:00.000Z', 'mem_004'));
+  });
+
+  it('marks the last (oldest) page hasMore=false and omits nextCursor', async () => {
+    const storeId = serverStoreId(WSP);
+    const res = await readTimeline({
+      hubUrl: 'http://hub.fake',
+      apiKey: 'mzk_fake',
+      workspaceId: WSP,
+      limit: 3,
+      before: { at: '2026-07-03T00:02:00.000Z', id: 'mem_002' },
+      fetchImpl: fakeHub(manyMemoryEvents(storeId, 10), []),
+    });
+    expect(res.items.map((i) => i.id)).toEqual(['mem_000', 'mem_001']);
+    expect(res.hasMore).toBe(false);
+    expect(res.nextCursor).toBeUndefined();
   });
 });
