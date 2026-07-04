@@ -26,6 +26,12 @@ export interface TaskBoardItem {
   id: string;
   /** Last transition timestamp (the Task row's updatedAt). */
   at: string;
+  /** Creation timestamp (the Task row's createdAt) — the wait-segment start. */
+  createdAt: string;
+  /** First `in_progress` transition, mined from the event log. Absent if the task never started. */
+  startedAt?: string;
+  /** Predecessor task ids (Task.dependsOn). Omitted when empty. */
+  dependsOn?: string[];
   /**
    * Raw member key — writer/provenance fallback chain, resolved to an account
    * email by the GATEWAY via the source-store registry. Events without
@@ -89,6 +95,7 @@ function toBoardItem(
   task: Task,
   lastEvent: DomainEvent | undefined,
   handoffs: Map<string, Handoff>,
+  startedAt: string | undefined,
 ): TaskBoardItem {
   const writer = lastEvent?.writer;
   const sourceProjectId = lastEvent?.sourceProjectId;
@@ -96,7 +103,10 @@ function toBoardItem(
   return {
     id: task.id,
     at: task.updatedAt,
+    createdAt: task.createdAt,
     member: writer ?? sourceProjectId ?? storeId,
+    ...(startedAt ? { startedAt } : {}),
+    ...(task.dependsOn.length ? { dependsOn: task.dependsOn } : {}),
     ...(writer ? { writer } : {}),
     ...(sourceProjectId
       ? { sourceProjectId, sourceProjectLabel: sourceProjectId }
@@ -152,10 +162,17 @@ export async function readTasks(params: ReadTasksParams): Promise<ReadTasksResul
   // a handoff is immutable, so its event payload IS its projected value.
   const events = await readEvents(storeId);
   const lastTaskEvent = new Map<string, DomainEvent>();
+  const firstInProgressAt = new Map<string, string>();
   const handoffs = new Map<string, Handoff>();
   for (const event of events) {
     const taskId = taskIdOfEvent(event);
-    if (taskId) lastTaskEvent.set(taskId, event);
+    if (taskId) {
+      lastTaskEvent.set(taskId, event);
+      const status = (event.payload as { status?: unknown }).status;
+      if (status === 'in_progress' && !firstInProgressAt.has(taskId)) {
+        firstInProgressAt.set(taskId, event.createdAt);
+      }
+    }
     if (event.type === 'handoff.created') {
       const handoff = event.payload as Handoff;
       if (typeof handoff.id === 'string') handoffs.set(handoff.id, handoff);
@@ -163,7 +180,9 @@ export async function readTasks(params: ReadTasksParams): Promise<ReadTasksResul
   }
 
   const items = listTasks(storeId, {}, 'union')
-    .map((task) => toBoardItem(storeId, task, lastTaskEvent.get(task.id), handoffs))
+    .map((task) =>
+      toBoardItem(storeId, task, lastTaskEvent.get(task.id), handoffs, firstInProgressAt.get(task.id)),
+    )
     .sort((a, b) => (a.at !== b.at ? (a.at < b.at ? -1 : 1) : a.id < b.id ? -1 : 1));
 
   return { storeId, pulled, items };
