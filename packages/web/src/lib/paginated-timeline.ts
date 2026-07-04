@@ -30,6 +30,7 @@ export function usePaginatedTimeline(workspaceId: string, enabled: boolean): Pag
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const cursorRef = useRef<string | undefined>(undefined);
+  const loadingOlderRef = useRef(false);
   const activeKey = useRef<string | null>(null);
 
   useEffect(() => {
@@ -39,7 +40,9 @@ export function usePaginatedTimeline(workspaceId: string, enabled: boolean): Pag
     setItems(cached ?? []);
     setLoading(!cached);
     setError(undefined);
+    setHasMore(false);
     setLoadingOlder(false);
+    loadingOlderRef.current = false;
     cursorRef.current = undefined;
     getWorkspaceTimeline(workspaceId, { limit: PAGE_SIZE })
       .then((res) => {
@@ -58,9 +61,10 @@ export function usePaginatedTimeline(workspaceId: string, enabled: boolean): Pag
   }, [enabled, key, workspaceId]);
 
   const loadOlder = useCallback(() => {
-    if (!hasMore || loadingOlder) return;
+    if (!hasMore || loadingOlderRef.current) return;
     const cursor = cursorRef.current;
     if (!cursor) return;
+    loadingOlderRef.current = true;
     setLoadingOlder(true);
     getWorkspaceTimeline(workspaceId, { limit: PAGE_SIZE, before: cursor })
       .then((res) => {
@@ -68,13 +72,15 @@ export function usePaginatedTimeline(workspaceId: string, enabled: boolean): Pag
         setItems((prev) => mergeOlderPage(prev, res.items));
         setHasMore(res.hasMore);
         cursorRef.current = res.nextCursor;
+        loadingOlderRef.current = false;
         setLoadingOlder(false);
       })
       .catch(() => {
         if (activeKey.current !== key) return;
+        loadingOlderRef.current = false;
         setLoadingOlder(false); // keep what we have; scrolling retriggers
       });
-  }, [hasMore, loadingOlder, workspaceId, key]);
+  }, [hasMore, workspaceId, key]);
 
   return { items, loading, error, hasMore, loadingOlder, loadOlder };
 }
