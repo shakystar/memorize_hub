@@ -172,9 +172,14 @@ hook owns page size (50).
 
 ## Known cost (not a scope cut)
 
-Every page fetch triggers a full relay `pullProject` + re-projection in the
-replica. Fine at beta scale (hundreds of memories); at thousands+ each page adds
-latency. The fix is read-lane incremental caching, tracked as a follow-up after
+Every page fetch re-runs `readTimeline`, which does a full local re-projection:
+`readEvents` reads the entire event log and `listValidMemories` rebuilds the
+whole projection, of which only the 50-item cursor window is kept. (The relay
+`pullProject` itself is *incremental* — a `since` watermark, usually 0 new
+events — so the cost is local reprojection, not network.) Fine at beta scale
+(hundreds of memories); at thousands+ each page is O(N), so scrolling the whole
+history is ~O(N²/limit). The fix is read-lane projection caching (keep the
+projection warm instead of rebuilding per request), tracked as a follow-up after
 `mr53no79` — explicitly deferred, not silently dropped.
 
 ## Files touched
