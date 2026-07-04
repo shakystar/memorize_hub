@@ -20,10 +20,11 @@ const BASE = '/app';
 export function parse(pathname: string): Route {
   const rest = pathname.startsWith(BASE) ? pathname.slice(BASE.length) : pathname;
   const segs = rest.split('/').filter(Boolean); // [] | ['personal'] | [id] | [id, tab]
-  if (segs[0] === 'personal') return { view: 'personal' };
-  if (segs.length === 0) return { view: 'workspace', workspaceId: null, tab: 'timeline' };
-  const workspaceId = decodeURIComponent(segs[0]);
-  const tab: Tab = isTab(segs[1]) ? segs[1] : 'timeline';
+  const [first, second] = segs;
+  if (first === 'personal') return { view: 'personal' };
+  if (first == null) return { view: 'workspace', workspaceId: null, tab: 'timeline' };
+  const workspaceId = decodeURIComponent(first);
+  const tab: Tab = isTab(second) ? second : 'timeline';
   return { view: 'workspace', workspaceId, tab };
 }
 
