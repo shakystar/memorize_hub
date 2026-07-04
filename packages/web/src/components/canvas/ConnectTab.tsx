@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 
 /**
  * Connect — the workspace's always-there onboarding surface, in GitHub
- * quick-setup grammar: the share URL bar, then two full command branches
- * (join from a new machine / attach an existing local project). No sync
- * line — clone/remote do the first pull/push themselves, then sync runs
- * automatically at session boundaries. Same copy as the /clone/:id landing.
+ * quick-setup grammar: the share URL bar, then one command block
+ * (`login` + `connect`, which auto-branches between a fresh machine and an
+ * existing local project). No `npm i -g` line — install and env wiring go
+ * through the AI_SETUP guide. Same copy as the /clone/:id landing.
  */
 
 function CopyButton({ text }: { text: string }) {
@@ -46,6 +46,9 @@ function CommandBlock({ title, cmds }: { title: string; cmds: string[] }) {
   );
 }
 
+const SETUP_GUIDE_URL =
+  'https://github.com/shakystar/memorize/blob/main/guides/AI_SETUP.md';
+
 export function ConnectTab({ workspaceId }: { workspaceId: string }) {
   const origin = window.location.origin;
   const cloneUrl = `${origin}/clone/${workspaceId}`;
@@ -62,21 +65,24 @@ export function ConnectTab({ workspaceId }: { workspaceId: string }) {
       </section>
 
       <CommandBlock
-        title="…or join from a new machine"
-        cmds={[
-          'npm i -g @shakystar/memorize',
-          `memorize login ${origin}`,
-          `memorize clone ${cloneUrl}`,
-        ]}
+        title="Set up on a new machine or project"
+        cmds={[`memorize login ${origin}`, `memorize connect ${cloneUrl}`]}
       />
-      <CommandBlock
-        title="…or attach an existing local project"
-        cmds={[
-          'npm i -g @shakystar/memorize',
-          `memorize login ${origin}`,
-          `memorize remote ${cloneUrl}`,
-        ]}
-      />
+
+      <section className="mt-4 rounded-lg border border-border p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">…or hand setup to your AI agent</h2>
+          <CopyButton
+            text={`Follow this guide to set up memorize in this project: ${SETUP_GUIDE_URL}`}
+          />
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Paste this to your coding agent — it installs and wires memorize for you:
+        </p>
+        <pre className="mt-2 overflow-x-auto rounded-md border border-border bg-card px-3 py-2 text-xs font-mono leading-6">
+          {`Follow this guide to set up memorize in this project:\n${SETUP_GUIDE_URL}`}
+        </pre>
+      </section>
 
       <p className="mt-4 text-xs text-muted-foreground">
         After connecting, sync runs automatically at session boundaries.
