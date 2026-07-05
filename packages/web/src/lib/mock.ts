@@ -132,7 +132,7 @@ export const MOCK_TASKS: TaskEntry[] = [
     ...mina,
   },
   {
-    id: 'task_02', at: at(1, 15, 20), createdAt: at(2, 12, 0), startedAt: at(2, 13, 0),
+    id: 'task_02', at: at(1, 15, 20), createdAt: at(2, 12, 0), startedAt: at(1, 12, 0),
     status: 'handoff_ready', priority: 'medium',
     title: 'Landing hero implementation', ownerType: 'agent',
     goal: 'The landing hero matches the A/B winner pixel-for-pixel.',
@@ -145,7 +145,7 @@ export const MOCK_TASKS: TaskEntry[] = [
     ...kant,
   },
   {
-    id: 'task_03', at: at(0, 10, 5), createdAt: at(0, 8, 30), startedAt: at(0, 9, 0),
+    id: 'task_03', at: at(0, 10, 5), createdAt: at(1, 8, 0), startedAt: at(0, 9, 0),
     status: 'in_progress', priority: 'high',
     title: 'Wire pricing page to billing', ownerType: 'agent',
     goal: 'Choosing a tier on the pricing page creates a real subscription.',
@@ -174,7 +174,7 @@ export const MOCK_TASKS: TaskEntry[] = [
     ...kant,
   },
   {
-    id: 'task_07', at: at(1, 16, 45), createdAt: at(2, 9, 0), startedAt: at(2, 9, 30),
+    id: 'task_07', at: at(1, 16, 45), createdAt: at(2, 9, 0), startedAt: at(1, 9, 0),
     status: 'blocked', priority: 'high',
     title: 'Enable live payments', ownerType: 'agent',
     description: 'Flip the payment provider from test mode to live once their review clears.',
@@ -185,7 +185,7 @@ export const MOCK_TASKS: TaskEntry[] = [
     ...myApp,
   },
   {
-    id: 'task_08', at: at(1, 17, 0), createdAt: at(2, 9, 0), startedAt: at(2, 9, 30),
+    id: 'task_08', at: at(1, 17, 0), createdAt: at(2, 9, 0), startedAt: at(1, 9, 0),
     status: 'done', priority: 'high',
     title: 'Finalize checkout flow copy', ownerType: 'agent', ...myApp,
   },
