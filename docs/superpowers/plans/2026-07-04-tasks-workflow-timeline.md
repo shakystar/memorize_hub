@@ -839,3 +839,14 @@ Expected: Task 1~5의 커밋이 순서대로. 브랜치 `feat/tasks-workflow-tim
 **Placeholder scan:** Task5 mock은 "형태 예시"라 명시하되 최소 요구(4항목)를 구체 지정 — 편집 대상이 기존 리터럴이라 정확한 라인 대신 요구조건으로 못박음. 그 외 TBD/TODO 없음.
 
 **Type consistency:** `TimelineSegments`/`computeSegments`/`timeDomain`/`topoOrder`/`linearScale` 시그니처가 Task3 정의와 Task4 소비에서 일치. `TaskBoardItem`(replica)와 `TaskEntry`(web)의 신규 필드명(`createdAt`/`startedAt`/`dependsOn`)이 Task1/2/3에서 동일. `arrowAnchor = startedAt ?? createdAt`가 spec §4.3과 Task3 구현·Task4 화살표 소비에서 일관.
+
+---
+
+## 구현 vs 계획 (2026-07-05 갱신)
+
+Task 1~3(replica 배선·protocol·순수 헬퍼+테스트)은 계획대로. **Task 4(`TasksTimeline.tsx`)와
+Task 5의 mock**은 계획의 "좌측 라벨 열 + SVG 막대" 대신, mock 대상 라이브 리뷰를 거쳐
+**Notion Timeline식**(카드 막대·제목 우측 흘림·무한 양방향 팬·Today·화살표 상위 레이어)으로
+전달됨 — 상세·근거는 **spec §8**. 순수 헬퍼/와이어/replica 로직은 무변경이라 계획의 테스트
+전략(Task 3/Task 6)은 그대로 유효. `linearScale`은 최종 렌더에서 인라인 `xOf`로 대체되어
+미사용이나 export·테스트는 유지(후속 정리 후보).
