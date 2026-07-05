@@ -171,6 +171,7 @@ describe('readTasks', () => {
     expect(legacy).toEqual({
       id: 'task_legacy',
       at: '2026-07-03T00:02:00.000Z',
+      createdAt: '2026-07-03T00:02:00.000Z',
       member: storeId, // unresolved on purpose: no provenance to attribute
       title: 'Old provenance-less task',
       status: 'todo',
@@ -211,5 +212,62 @@ describe('readTasks', () => {
     });
     expect(second.pulled).toMatchObject({ total: 0, inserted: 0 });
     expect(second.items).toHaveLength(2);
+  });
+
+  it('derives createdAt, startedAt (first in_progress) and dependsOn', async () => {
+    const storeId = serverStoreId(WSP);
+    const t0 = '2026-07-03T00:00:00.000Z';
+    const t1 = '2026-07-03T00:01:00.000Z';
+    const t2 = '2026-07-03T00:02:00.000Z';
+    const t3 = '2026-07-03T00:03:00.000Z';
+    const ev = (
+      id: string, type: DomainEvent['type'], at: string, payload: unknown,
+      scope?: { scopeType: DomainEvent['scopeType']; scopeId: string },
+    ): DomainEvent => ({
+      id, schemaVersion: CURRENT_SCHEMA_VERSION, createdAt: at, updatedAt: at, type,
+      projectId: storeId, scopeType: scope?.scopeType ?? 'project',
+      scopeId: scope?.scopeId ?? storeId, actor: 'user',
+      writer: ACC, sourceProjectId: 'proj_alice_laptop',
+      payload: payload as DomainEvent['payload'],
+    });
+    const events: DomainEvent[] = [
+      ev('e0', 'project.created', t0, {
+        id: storeId, schemaVersion: CURRENT_SCHEMA_VERSION, createdAt: t0, updatedAt: t0,
+        title: 'T', summary: 's', goals: [], status: 'active', rootPath: `hub://${WSP}`,
+        importedContextCount: 0, activeWorkstreamIds: [], activeTaskIds: [],
+        acceptedDecisionIds: [], ruleIds: [],
+      }),
+      // task_pre created first (predecessor)
+      ev('e1', 'task.created', t1, {
+        ...baseTask(storeId, 'task_pre', 'Predecessor', t1),
+      }, { scopeType: 'task', scopeId: 'task_pre' }),
+      // task_active created with a dependsOn edge, then in_progress at t2, done at t3
+      ev('e2', 'task.created', t1, {
+        ...baseTask(storeId, 'task_active', 'Active work', t1), dependsOn: ['task_pre'],
+      }, { scopeType: 'task', scopeId: 'task_active' }),
+      ev('e3', 'task.updated', t2, { id: 'task_active', status: 'in_progress', updatedAt: t2 },
+        { scopeType: 'task', scopeId: 'task_active' }),
+      ev('e4', 'task.updated', t3, { id: 'task_active', status: 'done', updatedAt: t3 },
+        { scopeType: 'task', scopeId: 'task_active' }),
+    ];
+
+    const result = await readTasks({
+      hubUrl: 'http://hub.fake', apiKey: 'mzk_fake', workspaceId: WSP,
+      fetchImpl: fakeHub(events),
+    });
+
+    const active = result.items.find((i) => i.id === 'task_active');
+    expect(active).toMatchObject({
+      createdAt: t1,
+      startedAt: t2,       // first in_progress transition
+      at: t3,              // last transition (done)
+      status: 'done',
+      dependsOn: ['task_pre'],
+    });
+
+    const pre = result.items.find((i) => i.id === 'task_pre');
+    expect(pre?.createdAt).toBe(t1);
+    expect(pre).not.toHaveProperty('startedAt');   // never entered in_progress
+    expect(pre).not.toHaveProperty('dependsOn');   // empty -> omitted
   });
 });

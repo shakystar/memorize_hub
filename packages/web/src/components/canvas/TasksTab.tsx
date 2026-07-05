@@ -2,6 +2,7 @@ import { ArrowRight, Check, CircleDashed, CircleHelp, Square, TriangleAlert, X }
 import { useState, type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
+import { TasksTimeline } from '@/components/canvas/TasksTimeline';
 import type { Priority, TaskEntry, TaskStatus } from '@/lib/domain';
 
 /**
@@ -10,8 +11,9 @@ import type { Priority, TaskEntry, TaskStatus } from '@/lib/domain';
  * views (board by status / list by source project), property filters, and
  * a detail peek panel. handoff_ready is the hero status — memorize's
  * signature state, the ball someone should pick up. Read-only: status
- * changes come from agents until UI authoring (§5 phase 2). No date
- * views: the domain has no due/start fields.
+ * changes come from agents until UI authoring (§5 phase 2). A timeline
+ * view derives wait/work segments from createdAt/startedAt — the domain
+ * still has no user-set due dates.
  */
 export function TasksTab({
   tasks,
@@ -23,7 +25,7 @@ export function TasksTab({
   badge?: string;
   emptyState: ReactNode;
 }) {
-  const [view, setView] = useState<'board' | 'list'>('board');
+  const [view, setView] = useState<'board' | 'list' | 'timeline'>('board');
   const [member, setMember] = useState<string | null>(null);
   const [priority, setPriority] = useState<Priority | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -48,7 +50,7 @@ export function TasksTab({
             </span>
           )}
           <span className="flex overflow-hidden rounded-md border border-border text-xs">
-            {(['board', 'list'] as const).map((v) => (
+            {(['board', 'list', 'timeline'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -57,7 +59,7 @@ export function TasksTab({
                   view === v ? 'bg-secondary font-medium' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                {v === 'board' ? 'Board' : 'List'}
+                {v === 'board' ? 'Board' : v === 'list' ? 'List' : 'Timeline'}
               </button>
             ))}
           </span>
@@ -74,11 +76,9 @@ export function TasksTab({
           />
         </div>
 
-        {view === 'board' ? (
-          <Board tasks={visible} selectedId={selectedId} onSelect={setSelectedId} />
-        ) : (
-          <List tasks={visible} selectedId={selectedId} onSelect={setSelectedId} />
-        )}
+        {view === 'board' && <Board tasks={visible} selectedId={selectedId} onSelect={setSelectedId} />}
+        {view === 'list' && <List tasks={visible} selectedId={selectedId} onSelect={setSelectedId} />}
+        {view === 'timeline' && <TasksTimeline tasks={visible} onSelect={setSelectedId} />}
       </div>
 
       {selected && <DetailPanel task={selected} onClose={() => setSelectedId(null)} />}

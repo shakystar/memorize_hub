@@ -89,13 +89,20 @@ export type TimelineItem = DomainTimelineItem;
  * `entities/handoff.ts`), so a handoff_ready card can show what the next
  * machine should do without a second fetch. Field names verbatim from the
  * entities; the domain defaults list fields to `[]` and the wire omits
- * empties. No due/start dates — the domain has none (a memorize-side
- * decision if a calendar/gantt view is ever wanted).
+ * empties. The wire carries `createdAt` always and `startedAt` once the task
+ * has entered `in_progress` (for the timeline view); the domain still has no
+ * user-set due dates.
  */
 export interface TaskEntry extends Provenance {
   id: string;
   /** ISO-8601 timestamp of the last status transition. */
   at: string;
+  /** ISO-8601 creation timestamp — the wait-segment start. */
+  createdAt: string;
+  /** ISO-8601 first `in_progress` transition; absent if the task never started. */
+  startedAt?: string;
+  /** Predecessor task ids. Omitted when empty. */
+  dependsOn?: string[];
   /** Owning workspace member (account email), server-resolved as in the timeline. */
   member: string;
   title: string;

@@ -112,7 +112,8 @@ export const MOCK_TIMELINE: TimelineItem[] = [
 /** The same team's task board: every visible status, handoffs with next actions. */
 export const MOCK_TASKS: TaskEntry[] = [
   {
-    id: 'task_01', at: at(0, 9, 40), status: 'handoff_ready', priority: 'high',
+    id: 'task_01', at: at(0, 9, 40), createdAt: at(1, 9, 0), startedAt: at(1, 10, 0),
+    status: 'handoff_ready', priority: 'high',
     title: 'Prepare launch-day social assets', ownerType: 'agent',
     goal: 'Every channel has ready-to-post assets before launch morning.',
     description: 'Static banners, the animated teaser, and per-channel copy variants for the launch announcement.',
@@ -131,7 +132,8 @@ export const MOCK_TASKS: TaskEntry[] = [
     ...mina,
   },
   {
-    id: 'task_02', at: at(1, 15, 20), status: 'handoff_ready', priority: 'medium',
+    id: 'task_02', at: at(1, 15, 20), createdAt: at(2, 12, 0), startedAt: at(1, 12, 0),
+    status: 'handoff_ready', priority: 'medium',
     title: 'Landing hero implementation', ownerType: 'agent',
     goal: 'The landing hero matches the A/B winner pixel-for-pixel.',
     handoff: {
@@ -143,31 +145,37 @@ export const MOCK_TASKS: TaskEntry[] = [
     ...kant,
   },
   {
-    id: 'task_03', at: at(0, 10, 5), status: 'in_progress', priority: 'high',
+    id: 'task_03', at: at(0, 10, 5), createdAt: at(1, 8, 0), startedAt: at(0, 9, 0),
+    status: 'in_progress', priority: 'high',
     title: 'Wire pricing page to billing', ownerType: 'agent',
     goal: 'Choosing a tier on the pricing page creates a real subscription.',
     acceptanceCriteria: ['Checkout succeeds for both paid tiers', 'Webhook updates the account plan'],
     openQuestions: ['Trial length: 7 or 14 days?'],
+    dependsOn: ['task_08'],
     ...myApp,
   },
   {
-    id: 'task_04', at: at(0, 11, 30), status: 'in_progress', priority: 'medium',
+    id: 'task_04', at: at(0, 11, 30), createdAt: at(1, 8, 0), startedAt: at(0, 11, 0),
+    status: 'in_progress', priority: 'medium',
     title: 'Draft launch announcement email', ownerType: 'human', ...mina,
   },
   {
     // Real task titles run long (agents write whole sentences) — this one
     // exists to exercise the card line-clamp.
-    id: 'task_05', at: at(1, 9, 0), status: 'todo', priority: 'medium',
+    id: 'task_05', at: at(1, 9, 0), createdAt: at(1, 9, 0), status: 'todo', priority: 'medium',
     title:
       'Set up a status page for launch week: uptime badges for gateway + relay, incident template, and a subscribe-to-updates link surfaced from the footer of every page',
     ownerType: 'unassigned', ...myWeb,
   },
   {
-    id: 'task_06', at: at(2, 14, 0), status: 'todo', priority: 'low',
-    title: 'Collect testimonial quotes from beta users', ownerType: 'unassigned', ...kant,
+    id: 'task_06', at: at(1, 8, 0), createdAt: at(1, 8, 0), status: 'todo', priority: 'low',
+    title: 'Collect testimonial quotes from beta users', ownerType: 'unassigned',
+    dependsOn: ['task_09'],
+    ...kant,
   },
   {
-    id: 'task_07', at: at(1, 16, 45), status: 'blocked', priority: 'high',
+    id: 'task_07', at: at(1, 16, 45), createdAt: at(2, 9, 0), startedAt: at(1, 9, 0),
+    status: 'blocked', priority: 'high',
     title: 'Enable live payments', ownerType: 'agent',
     description: 'Flip the payment provider from test mode to live once their review clears.',
     riskNotes: [
@@ -177,15 +185,17 @@ export const MOCK_TASKS: TaskEntry[] = [
     ...myApp,
   },
   {
-    id: 'task_08', at: at(1, 17, 0), status: 'done', priority: 'high',
+    id: 'task_08', at: at(1, 17, 0), createdAt: at(2, 9, 0), startedAt: at(1, 9, 0),
+    status: 'done', priority: 'high',
     title: 'Finalize checkout flow copy', ownerType: 'agent', ...myApp,
   },
   {
-    id: 'task_09', at: at(2, 18, 30), status: 'done', priority: 'medium',
+    id: 'task_09', at: at(2, 18, 30), createdAt: at(3, 8, 0), startedAt: at(3, 8, 30),
+    status: 'done', priority: 'medium',
     title: 'Instrument the signup funnel', ownerType: 'agent', ...myApp,
   },
   {
-    id: 'task_10', at: at(3, 12, 0), status: 'cancelled', priority: 'low',
+    id: 'task_10', at: at(3, 12, 0), createdAt: at(4, 10, 0), status: 'cancelled', priority: 'low',
     title: 'Beta waitlist gate for signups', ownerType: 'agent', ...myWeb,
   },
 ];
