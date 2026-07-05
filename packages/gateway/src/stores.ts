@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 
 import { newId } from './ids.js';
+import { deleteDerivedStores } from './derived-stores.js';
 
 /**
  * Store + membership DAL (Hub SoT H040 `stores` + `memberships`). A store is a
@@ -215,6 +216,7 @@ export function deleteStore(db: Database.Database, storeId: string): void {
   const write = db.transaction(() => {
     db.prepare('DELETE FROM invites WHERE store_id = ?').run(storeId);
     db.prepare('DELETE FROM memberships WHERE store_id = ?').run(storeId);
+    deleteDerivedStores(db, storeId);
     db.prepare('DELETE FROM stores WHERE store_id = ?').run(storeId);
   });
   write();

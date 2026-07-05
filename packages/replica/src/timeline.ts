@@ -8,6 +8,33 @@ import { readEvents } from '@shakystar/memorize/dist/storage/event-store.js';
 
 import { ensureReadLane } from './read-lane.js';
 
+const DEFAULT_LIMIT = 50;
+
+export interface TimelineCursor {
+  at: string;
+  id: string;
+}
+
+/** Opaque wire cursor. Only the replica encodes/decodes it. */
+export function encodeCursor(at: string, id: string): string {
+  return Buffer.from(`${at}|${id}`, 'utf8').toString('base64url');
+}
+
+export function decodeCursor(raw: string): TimelineCursor {
+  const decoded = Buffer.from(raw, 'base64url').toString('utf8');
+  const sep = decoded.indexOf('|');
+  if (sep <= 0 || sep === decoded.length - 1) {
+    throw new Error(`malformed timeline cursor: ${raw}`);
+  }
+  return { at: decoded.slice(0, sep), id: decoded.slice(sep + 1) };
+}
+
+/** Strict (at,id) < cursor, matching byAscendingTimeline ordering. */
+function isBeforeCursor(item: { at: string; id: string }, cursor: TimelineCursor): boolean {
+  if (item.at !== cursor.at) return item.at < cursor.at;
+  return item.id < cursor.id;
+}
+
 export interface TimelineMemoryItem {
   id: string;
   at: string;
@@ -31,6 +58,8 @@ export interface ReadTimelineParams {
   workspaceId: string;
   /** Return the newest N items while preserving chronological display order. */
   limit?: number;
+  /** Return items strictly older than this cursor (backward pagination). */
+  before?: TimelineCursor;
   /** Test seam. */
   fetchImpl?: typeof fetch;
 }
@@ -39,6 +68,10 @@ export interface ReadTimelineResult {
   storeId: string;
   pulled: SyncPullResult;
   items: TimelineMemoryItem[];
+  /** True when older items exist beyond this page. */
+  hasMore: boolean;
+  /** Opaque cursor for the next older page; omitted when hasMore is false. */
+  nextCursor?: string;
 }
 
 function memoryIdFromEvent(event: DomainEvent): string | undefined {
@@ -82,7 +115,7 @@ export async function readTimeline(
     if (memoryId) memoryEvents.set(memoryId, event);
   }
 
-  const items = listValidMemories(storeId, 'union')
+  const all = listValidMemories(storeId, 'union')
     .map(({ memory }) => {
       const event = memoryEvents.get(memory.id);
       const writer = event?.writer;
@@ -104,9 +137,17 @@ export async function readTimeline(
     })
     .sort(byAscendingTimeline);
 
+  const limit = params.limit ?? DEFAULT_LIMIT;
+  const pool = params.before ? all.filter((i) => isBeforeCursor(i, params.before!)) : all;
+  const page = pool.slice(-limit);
+  const hasMore = pool.length > page.length;
+  const oldest = page[0];
+
   return {
     storeId,
     pulled,
-    items: params.limit ? items.slice(-params.limit) : items,
+    items: page,
+    hasMore,
+    ...(hasMore && oldest ? { nextCursor: encodeCursor(oldest.at, oldest.id) } : {}),
   };
 }

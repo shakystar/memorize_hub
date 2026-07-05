@@ -99,11 +99,20 @@ export interface TimelineResponse {
   storeId: string;
   pulled: { total: number; inserted: number; lastRemoteEventId?: string };
   items: TimelineItem[];
+  /** True when older items exist beyond this page. */
+  hasMore: boolean;
+  /** Opaque cursor for the next older page; absent on the oldest page. */
+  nextCursor?: string;
 }
 
-/** Live workspace timeline. Demo/mock views do not call this. */
-export async function getWorkspaceTimeline(id: string, limit = 100): Promise<TimelineResponse> {
-  const res = await fetch(`/v1/workspaces/${q(id)}/timeline?limit=${limit}`, {
+/** Live workspace timeline (one page). Demo/mock views do not call this. */
+export async function getWorkspaceTimeline(
+  id: string,
+  query: { limit?: number; before?: string } = {},
+): Promise<TimelineResponse> {
+  const params = new URLSearchParams({ limit: String(query.limit ?? 50) });
+  if (query.before) params.set('before', query.before);
+  const res = await fetch(`/v1/workspaces/${q(id)}/timeline?${params.toString()}`, {
     credentials: 'same-origin',
   });
   await ok(res, `GET /v1/workspaces/${id}/timeline`);
