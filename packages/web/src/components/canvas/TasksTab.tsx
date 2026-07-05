@@ -11,8 +11,9 @@ import type { Priority, TaskEntry, TaskStatus } from '@/lib/domain';
  * views (board by status / list by source project), property filters, and
  * a detail peek panel. handoff_ready is the hero status — memorize's
  * signature state, the ball someone should pick up. Read-only: status
- * changes come from agents until UI authoring (§5 phase 2). No date
- * views: the domain has no due/start fields.
+ * changes come from agents until UI authoring (§5 phase 2). A timeline
+ * view derives wait/work segments from createdAt/startedAt — the domain
+ * still has no user-set due dates.
  */
 export function TasksTab({
   tasks,

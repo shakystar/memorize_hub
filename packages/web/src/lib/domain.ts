@@ -89,8 +89,9 @@ export type TimelineItem = DomainTimelineItem;
  * `entities/handoff.ts`), so a handoff_ready card can show what the next
  * machine should do without a second fetch. Field names verbatim from the
  * entities; the domain defaults list fields to `[]` and the wire omits
- * empties. No due/start dates — the domain has none (a memorize-side
- * `createdAt`은 항상, `startedAt`은 in_progress를 거친 경우 실린다(타임라인 뷰용).
+ * empties. The wire carries `createdAt` always and `startedAt` once the task
+ * has entered `in_progress` (for the timeline view); the domain still has no
+ * user-set due dates.
  */
 export interface TaskEntry extends Provenance {
   id: string;

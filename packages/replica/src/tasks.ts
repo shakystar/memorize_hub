@@ -106,7 +106,7 @@ function toBoardItem(
     createdAt: task.createdAt,
     member: writer ?? sourceProjectId ?? storeId,
     ...(startedAt ? { startedAt } : {}),
-    ...(task.dependsOn.length ? { dependsOn: task.dependsOn } : {}),
+    ...(nonEmpty(task.dependsOn) ? { dependsOn: task.dependsOn } : {}),
     ...(writer ? { writer } : {}),
     ...(sourceProjectId
       ? { sourceProjectId, sourceProjectLabel: sourceProjectId }

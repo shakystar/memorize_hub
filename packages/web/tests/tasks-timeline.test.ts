@@ -83,6 +83,12 @@ describe('topoOrder', () => {
     const b = task({ id: 'b', createdAt: '2026-07-03T00:00:00.000Z', at: '2026-07-03T00:00:00.000Z', status: 'todo', dependsOn: ['a'] });
     expect(topoOrder([a, b]).map((t) => t.id).sort()).toEqual(['a', 'b']);
   });
+
+  it('orders independent tasks by createdAt then id', () => {
+    const b = task({ id: 'b', createdAt: '2026-07-03T00:00:00.000Z', at: '2026-07-03T00:00:00.000Z', status: 'todo' });
+    const a = task({ id: 'a', createdAt: '2026-07-03T00:00:00.000Z', at: '2026-07-03T00:00:00.000Z', status: 'todo' });
+    expect(topoOrder([b, a]).map((t) => t.id)).toEqual(['a', 'b']);
+  });
 });
 
 describe('linearScale', () => {
