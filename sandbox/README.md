@@ -6,7 +6,7 @@ one memorize project through a Hub over the network. It proves async
 against a real Hub - without two physical machines.
 
 ```
-mzA ──push──▶  Hub (https://...fly.dev)  ◀──pull── mzB
+mzA ──push──▶  Hub (https://memorizehub.com)  ◀──pull── mzB
    each = a memorize@2.4.0 replica, its own MEMORIZE_ROOT, over HTTPS
 ```
 
