@@ -138,7 +138,8 @@ fine.
 - **M5 (done, infra)** - **public deploy** on **Fly.io** (decision resolved):
   gateway (public, TLS-terminated) + relay (internal-only, token-gated) in one
   Docker image, durable `/data` volume, CI continuous deploy + live smoke test;
-  public at `https://memorize-hub-shakystar.fly.dev`. See `docs/DEPLOY.md`.
+  public at `https://memorizehub.com` (custom domain, 2026-07-18; the
+  `memorize-hub-shakystar.fly.dev` host still serves). See `docs/DEPLOY.md`.
   *Remaining (validation, not build):* onboard the first real beta participant,
   measure real cross-device async convergence over the live Hub.
 - **Personal-memory store (done, 2026-06-30, #32)** - per-account, owner-only

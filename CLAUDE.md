@@ -55,7 +55,7 @@ The sibling `memorize` repo holds the client.
     revised from GitHub OAuth so non-developers aren't gated on a GitHub account;
     email is the identity anchor + admin allowlist key.)
   - **M5 done (infra)** - deployed live on Fly.io
-    (`https://memorize-hub-shakystar.fly.dev`): gateway public + TLS, relay
+    (`https://memorizehub.com`): gateway public + TLS, relay
     internal-only + token-gated, durable `/data` volume, CI continuous deploy +
     smoke test. See `docs/DEPLOY.md`.
   - **Personal-memory store** (2026-06-30, #32) - per-account owner-only `psm_`

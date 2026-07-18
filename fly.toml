@@ -17,7 +17,7 @@ primary_region = "nrt"        # Tokyo; pick the region nearest your machines
   # the same volume; the old /data/gateway.db is left orphaned (reclaim manually).
   GATEWAY_DB = "/data/gateway-v2.db"
   # Non-secret operator config (secrets go via `fly secrets set` — see DEPLOY.md):
-  #   GATEWAY_PUBLIC_URL   = "https://<app>.fly.dev"
+  #   GATEWAY_PUBLIC_URL   = "https://<app>.fly.dev"  # or your custom domain (see DEPLOY.md)
   #   GATEWAY_ADMIN_EMAILS = "you@example.com"
 
 # Public edge = the gateway only. The relay's 8787 is never published, so it is

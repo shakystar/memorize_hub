@@ -132,6 +132,27 @@ open  https://<your-app-name>.fly.dev/beta            # public request page
 open  https://<your-app-name>.fly.dev/admin          # Google sign-in -> dashboard
 ```
 
+### 4b. Custom domain (optional)
+The live deployment serves `https://memorizehub.com`; the `.fly.dev` host keeps
+working alongside it (the gateway does not filter by host). Browser login always
+lands the session on `GATEWAY_PUBLIC_URL`'s host, so that domain is the
+canonical one.
+
+```bash
+fly certs add <your-domain>      # registers the cert; prints the DNS targets
+fly ips list                     # A record -> the v4 IP, AAAA -> the v6 IP
+fly certs check <your-domain>    # repeat until "verified and active"
+```
+
+At your DNS provider, add those `A`/`AAAA` records on the apex. On Cloudflare,
+set both to **DNS only** (grey cloud) - the proxy breaks Fly's cert validation.
+Then add `https://<your-domain>/oauth/callback` to the Google OAuth client's
+redirect URIs (step 2) and repoint the gateway:
+
+```bash
+fly secrets set GATEWAY_PUBLIC_URL="https://<your-domain>"
+```
+
 ### 5. Onboard a beta participant
 1. They submit the form at `/beta` (email + their project id).
 2. You approve at `/admin` - the dashboard shows the **one-time API key**.

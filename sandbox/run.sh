@@ -20,7 +20,7 @@ set -euo pipefail
 IMAGE=mz-replica
 A=mzA
 B=mzB
-HUB="${HUB:-https://memorize-hub-shakystar.fly.dev}"
+HUB="${HUB:-https://memorizehub.com}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ensure_docker() {

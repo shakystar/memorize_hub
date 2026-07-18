@@ -61,7 +61,7 @@ jobs:
       - name: Smoke test the live site
         run: |
           set -euo pipefail
-          base="https://memorize-hub-shakystar.fly.dev"
+          base="https://memorizehub.com"
           for i in $(seq 1 20); do
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$base/healthz" || true)
             [ "$code" = "200" ] && { echo "healthz ok"; break; }
