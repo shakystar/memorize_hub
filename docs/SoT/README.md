@@ -1,4 +1,6 @@
-# memorize_hub Source of Truth (Hub SoT)
+# memorize_hub 설계 결정 원본 (Hub SoT)
+
+> 보존 문서: 개발 당시 결정과 출처를 유지한다. 현재 구현·검증 범위는 [최종 상태](../final-status.md)를 참고한다.
 
 memorize_hub(전송 relay + 제어평면 gateway)의 하중을 지는 아키텍처 불변식과 확정된
 결정들. `memorize/docs/SoT`(제품층)와 짝을 이루며, 그 SoT가 다루지 않는 **Hub의
@@ -14,7 +16,7 @@ memorize_hub(전송 relay + 제어평면 gateway)의 하중을 지는 아키텍�
 - 반대로, Hub 고유 아키텍처(2-plane 경계, wsp_ 전송 토폴로지, 제어평면 스키마)는
   memorize SoT에 없으며 여기가 authoritative다.
 
-## 상태 범례 (Status legend)
+## 상태 범례
 
 - **Invariant (불변)** - 아키텍처(dumb relay, opaque append-only 로그, 2-plane 분리)가
   강제하는 것. 바꾸려면 모델 자체를 바꿔야 한다.
@@ -26,7 +28,7 @@ memorize_hub(전송 relay + 제어평면 gateway)의 하중을 지는 아키텍�
 memorize SoT와 동일하다. 확정된 문서를 제자리에서 덮어쓰지 않는다. Invariant나
 Decision을 바꾸려면 대체 문서를 추가하고 옛 문서는 `대체됨:`으로 남긴다.
 
-## 인덱스 (Index)
+## 인덱스
 
 | 문서 | 주제 | 주 상태 |
 | --- | --- | --- |
@@ -51,7 +53,7 @@ Decision을 바꾸려면 대체 문서를 추가하고 옛 문서는 `대체됨:
 둘 다 100% local-replicate + Hub-transit다. 서버측 consolidation·E2E·realtime는 어느
 해피패스도 쓰지 않는다([[H060]], [[H070]], [[H900]]). 상세: [[H020]], [[H040]].
 
-## 출처 (Source)
+## 출처
 
 2026-07-01 memorize_hub 워크스페이스 설계 세션. memorize SoT 2026-07-01 세트를 기반
 컨텍스트로 삼음. 진단 동반: `docs/WORKSPACE_CONTRACT_BRIEF.md`, `docs/JOIN_AND_MERGE.md`,
