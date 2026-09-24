@@ -1,174 +1,97 @@
-# memorize_hub Wire Protocol (v1)
+# memorize_hub HTTP 계약 (v1)
 
-> **Authoritative source of truth** for the HTTP contract shared by the
-> `memorize` client (`src/adapters/sync-transport-http.ts`) and this Hub. Both
-> sides implement these documents. Versioned under `/v1`. The top-level
-> [`../../PROTOCOL.md`](../../PROTOCOL.md) is a thin index that points here.
+> `memorize` 클라이언트(`src/adapters/sync-transport-http.ts`)와 Hub가 함께 구현하는 HTTP 계약의 기준 문서다. `/v1` 아래에 버전을 두며, 루트 [PROTOCOL.md](../../PROTOCOL.md)는 이 문서를 가리킨다. 개발 종료 이후의 구현·검증 범위는 [최종 상태](../final-status.md)를 참고한다.
 
-The contract splits by **surface**, not by one giant file, because the
-control-plane now carries 10+ endpoints and the cross-cutting rules below must be
-stated **once** instead of re-derived per endpoint (which is how error cases went
-missing in the single-file draft).
+계약을 기능별 문서로 나누고, 인증·상태 코드·존재 여부 노출 같은 공통 규칙은 여기에서 한 번 정의한다. 개별 문서에 명시가 없으면 이 공통 규칙을 적용한다.
 
-| Document | Surface | Plane |
-|---|---|---|
-| [`transport.md`](./transport.md) | `POST/GET .../events`, `/healthz`, E2E envelope | relay (transport) |
-| [`store-resolution.md`](./store-resolution.md) | server-minted store ids, discovery overview | gateway (control) |
-| [`account.md`](./account.md) | `GET /v1/account` identity echo (whoami) | gateway (control) |
-| [`personal-store.md`](./personal-store.md) | `psm_` per-account personal memory | gateway (control) |
-| [`workspace.md`](./workspace.md) | `wsp_` create / invite / join / membership / roles | gateway (control) |
-| [`device-auth.md`](./device-auth.md) | `POST /v1/device/code` · `/device` · `POST /v1/device/token` (browser device login) | gateway (control) |
+| 문서 | 기능 | 계층 |
+| --- | --- | --- |
+| [transport.md](./transport.md) | `POST/GET .../events`, `/healthz`, E2E envelope | relay 전송 |
+| [store-resolution.md](./store-resolution.md) | 서버 발급 저장소 ID와 조회 | gateway 제어 |
+| [account.md](./account.md) | `GET /v1/account` 호출자 정보 | gateway 제어 |
+| [personal-store.md](./personal-store.md) | 계정별 `psm_` 개인 기억 | gateway 제어 |
+| [workspace.md](./workspace.md) | `wsp_` 생성·초대·합류·멤버십·역할 | gateway 제어 |
+| [device-auth.md](./device-auth.md) | 기기 코드·브라우저 승인·토큰 발급 | gateway 제어 |
+| [derived-store.md](./derived-store.md) | 파생 저장소 | gateway·replica 경계 |
 
-`transport.md` is the only surface a **bare relay** (no gateway) serves. The rest
-are gateway control-plane; a relay knows nothing of accounts, stores, or prefixes
-(Hub SoT [[H010]]).
+단독 relay는 `transport.md`의 기능만 제공하며 계정·저장소 종류·접두사를 해석하지 않는다(H010).
 
----
+## 1. 식별자와 네임스페이스 (H050)
 
-## Conventions (bind on every endpoint below)
+모든 경로 ID는 `^[A-Za-z0-9_-]{1,128}$`를 만족해야 한다. 그렇지 않으면 저장소에 접근하기 전에 `400`을 반환한다. ID가 파일 경로 요소가 되므로 경로 탐색 공격도 이 경계에서 차단한다. 서버 발급 ID도 이 규칙을 따른다.
 
-Stated here once; each surface doc references this section instead of repeating
-it. When a surface doc is silent on auth, status, or existence-leak, **this
-section is the answer.**
+| 접두사 | 의미 | 발급 주체 | relay 경로 ID 여부 |
+| --- | --- | --- | --- |
+| `acc_` | 계정 | gateway | 아니오 |
+| `psm_` | 개인 저장소 | gateway | 예 |
+| `wsp_` | 프로젝트·워크스페이스 저장소 | gateway | 예 |
+| `inv_` | 초대 | gateway | 아니오 |
+| `tok_` | API 키 ID | gateway | 아니오 |
+| `proj_` | 클라이언트의 로컬 프로젝트 정체성과 출처 | memorize 클라이언트 | 아니오. 이벤트 내부 `sourceProjectId`에 사용 |
 
-### 1. Identifiers and namespaces (Hub SoT [[H050]])
+`wsp_`는 구성원 1명이면 비공개, 여러 명이면 공유 저장소다. gateway는 `psm_`·`wsp_`·`inv_` 형태의 ID를 일반 프로젝트처럼 권한 부여·복제·접근 요청 대상으로 재해석하지 않는다. 저장소 종류는 발급 시 고정된다.
 
-Every path id MUST match `^[A-Za-z0-9_-]{1,128}$`. Anything else -> `400`, before
-touching storage (the id becomes a relay filesystem path component, so this also
-closes path traversal). All server-minted ids conform by construction.
+## 2. 호출 주체와 인증 축 (H030)
 
-| Prefix | Kind | Minted by | Is a relay path id? |
-|---|---|---|---|
-| `acc_` | account (OAuth root) | gateway | no (control-plane id) |
-| `psm_` | personal store | gateway | yes |
-| `wsp_` | project/workspace store (1-member = private, N-member = shared) | gateway | yes |
-| `inv_` | invite | gateway | no |
-| `tok_` | API key id | gateway | no |
-| `proj_` | **client** local project identity + provenance | memorize client | **no** — travels as `sourceProjectId` *inside* events, never as a path id |
+모든 gateway 엔드포인트는 호출자를 하나의 주체로 해석한다.
 
-**Reserved namespaces.** The gateway refuses to grant, clone, or create an
-access request for a `psm_`/`wsp_`/`inv_`-shaped id as if it were a plain project
-— a store's kind is fixed at mint time and never reinterpreted.
-
-### 2. Principal and auth axes (Hub SoT [[H030]])
-
-Every gateway endpoint resolves the caller to a single **principal**:
-
-```
+```text
 principal = { accountId: "acc_…", via: "key" | "session", readOnly: bool, scoped: bool }
 ```
 
-- **`via: "key"`** — `Authorization: Bearer <mzk_…>`. A key resolves to exactly
-  one `accountId` (memorize SoT-020). This is the CLI/agent path.
-- **`via: "session"`** — a browser OAuth session cookie, resolving to one
-  `accountId`. This is the `/account`, `/admin`, and `/join` web path.
+- `via: "key"`: `Authorization: Bearer <mzk_…>`. 키는 정확히 한 계정에 대응하며 CLI·에이전트가 사용한다.
+- `via: "session"`: OAuth 세션 쿠키가 한 계정에 대응한다. `/account`, `/admin`, `/join`의 브라우저 경로다.
 
-`authorize(principal, resource, action)` is the single policy gate: **resource** is
-a store (`psm_`/`wsp_`) or a control object (workspace / invite / membership);
-**action** is `read` (pull), `write` (push / mutate), or `admin` (manage
-membership, mint/revoke invites, delete). The gateway never parses event payloads
-— authorization is **coarse** (metadata only), by construction (SoT-060, [[H010]]).
+`authorize(principal, resource, action)`을 단일 정책 경계로 둔다. 자원은 저장소(`psm_`·`wsp_`) 또는 워크스페이스·초대·멤버십 같은 제어 객체다. 동작은 `read`, `write`, `admin`이다. gateway는 이벤트 payload를 파싱해 권한을 결정하지 않으며 저장소·제어 메타데이터 단위로 판단한다.
 
-### 3. `read_only` x scope matrix
+## 3. 읽기 전용과 범위 제한
 
-Two orthogonal key attributes narrow — never widen — what a key may do. Both
-default to "off" (a plain key is read-write and unscoped).
+두 속성은 서로 독립적이며 기존 권한을 넓히지 않고 좁히기만 한다. 둘 다 꺼져 있으면 읽기·쓰기 가능한 비범위제한 키다.
 
-| Attribute | Effect |
-|---|---|
-| **`read_only`** | The key may perform **reads only, on both planes**: data-plane `GET .../events` (pull) and control-plane `GET` discovery/roster. It may NOT push events *or* perform any control-plane mutation (create / invite / join / revoke / remove / role-change / leave / delete) -> `403`. A read-only key is a pull-only agent capability. |
-| **scoped** (`token_scopes` non-empty) | A **data-plane-only** capability, narrowed to the specific store ids it lists. It may pull/push **only** those `wsp_` stores (still `∩` membership), reaches **no** personal store, and reaches **no** control-plane management endpoint -> `403`. Management (create/join/discover/roster/member-admin) and personal memory require an **unscoped** key. |
+| 속성 | 허용 범위 |
+| --- | --- |
+| `read_only` | 양쪽 계층의 읽기만 허용한다. 이벤트 push뿐 아니라 생성·초대·합류·취소·제거·역할 변경·탈퇴·삭제도 `403`이다. |
+| `scoped` (`token_scopes`가 비어 있지 않음) | 명시된 `wsp_`의 데이터 전송만 허용하며 실제 멤버십과 교집합을 취한다. 개인 저장소와 제어 계층 관리 엔드포인트에는 접근할 수 없고 `403`이다. |
 
-Rationale: a scoped key that could create a workspace would mint one it then
-can't reach (not in its scope) — so management is unscoped-only, mirroring the
-personal-store rule. `read_only` is the read/write axis; scope is the
-which-stores axis; they compose by intersection (SoT [[H030]]).
+생성·합류·조회·멤버 관리와 개인 기억 접근에는 비범위제한 키가 필요하다. `read_only`는 읽기·쓰기 축, scope는 대상 저장소 축이며 두 제약을 함께 적용한다.
 
-### 4. Status codes (global)
+## 4. 공통 상태 코드
 
-| Code | When |
-|---|---|
-| `200` | success (idempotent no-op included) |
-| `201` | resource created (workspace, invite) |
-| `204` | success, no body (revoke, remove, delete) |
-| `400` | malformed JSON / invalid id format / missing required field |
-| `401` | auth required and key/session missing or invalid |
-| `403` | authenticated but not permitted (role/`read_only`/scope denies a **visible** resource) |
-| `404` | unknown route, or a resource the caller may not even observe (see §5) |
-| `409` | conflict — the mutation violates an invariant (last-owner removal/demote) |
-| `413` | request body exceeds the size limit |
-| `5xx` | relay- or gateway-side failure |
+| 코드 | 의미 |
+| --- | --- |
+| `200` | 성공. 멱등한 무변경 응답 포함 |
+| `201` | 워크스페이스·초대 등 생성 |
+| `204` | 본문 없는 성공 |
+| `400` | JSON·ID 형식 오류 또는 필수 필드 누락 |
+| `401` | 인증이 필요하지만 키·세션이 없거나 유효하지 않음 |
+| `403` | 인증됐지만 역할·읽기 전용·scope로 동작 거부 |
+| `404` | 알 수 없는 경로 또는 관찰할 수 없는 자원 |
+| `409` | 마지막 owner 제거·강등 등 불변식 충돌 |
+| `413` | 본문 크기 제한 초과 |
+| `5xx` | relay 또는 gateway 실패 |
 
-Error body is always `{ "error": "<human message>" }`. Any non-2xx makes the
-memorize client throw; its never-throw auto-sync gate degrades that to a deferred
-no-op and retries at the next boundary, so transient outages are invisible and
-self-healing — never data loss (events stay in the local append-only log until a
-push succeeds).
+오류 본문은 `{ "error": "<설명>" }` 형태다. memorize 클라이언트는 2xx가 아니면 오류로 처리하며, 자동 동기화 경계에서는 실패를 지연하고 다음 경계에서 재시도한다. push 성공 전에도 이벤트는 로컬 로그에 남는다. 이 계약을 모든 운영 장애에서 무손실이라는 보장으로 확대하지 않는다.
 
-### 5. `403` vs `404` — existence-leak policy
+## 5. `403`과 `404`: 자원의 존재 노출
 
-Uniform rule so it is intentional, not per-endpoint accident:
+- 제어 계층 `/v1/workspaces/:id/…`: 멤버만 자원을 관찰할 수 있다. 비멤버와 존재하지 않는 ID는 동일한 `404`를 반환한다. 멤버지만 owner 동작 권한이 부족하면 `403`, ID 형식 오류는 `400`이다.
+- 데이터 계층 `/v1/projects/:storeId/events`: `wsp_` 비멤버이거나 `psm_` 소유자가 아니면 저장소 접근 거부 `403`을 반환한다. 기존 개인 저장소 계약과 일치한다.
 
-- **Control-plane workspace resources** (`/v1/workspaces/:id/…`): you must be a
-  **member** to observe the resource at all. Non-member **or** unknown id ->
-  `404` (identical response; a non-member cannot confirm a workspace exists).
-  Member-but-insufficient-role (e.g. a `member` attempting an owner action) ->
-  `403`. Invalid id format -> `400`.
-- **Data-plane events route** (`/v1/projects/:storeId/events`): a store-level
-  access denial (not a member of the `wsp_`, or not the owner of the `psm_`) ->
-  `403`, matching the established personal-store convention. The events route is a
-  generic relay proxy; `403` = "you cannot access this store."
+서버는 추측하기 어려운 ID를 발급하며 제어 계층의 비멤버 `404`로 자원 존재 확인을 제한한다.
 
-Server-minted ids are unguessable, so `404` for non-members leaks nothing while
-giving cleaner client behaviour.
+## 6. CLI와 브라우저
 
-### 6. Two client audiences
+같은 권한을 두 경로로 사용한다. CLI·에이전트는 API 키와 HTTPS JSON 요청을, 브라우저는 OAuth 세션을 사용한다.
 
-The same capability is reachable two ways, and both are first-class:
+- `/join?token=…`은 `POST /v1/workspaces/join`과 같은 합류 기능을 감싸는 사용자 승인 화면이다.
+- `/clone/:storeId`는 공유 URL을 브라우저에서 열었을 때의 안내 화면이다. CLI는 같은 URL에서 origin을 remote URL로, 마지막 경로 요소를 저장소 ID로 해석한다. 멤버에게는 온보딩 명령을, 로그아웃 상태에는 로그인을 안내하며 비멤버·미존재 자원에는 `404`를 반환한다. 이 화면 자체는 별도의 API 동작을 정의하지 않는다.
 
-- **CLI / agent** holds an **API key** (`via: "key"`) and drives every route as
-  JSON over HTTPS.
-- **Browser** holds an **OAuth session** (`via: "session"`) for `/account`,
-  `/admin`, the **`/join?token=…` invite landing** — the human-facing
-  redeem path that wraps the same join capability as
-  `POST /v1/workspaces/join` (see [`workspace.md`](./workspace.md)) — and the
-  **`/clone/:storeId` share landing**, a pure guidance page for a share URL
-  pasted into a browser (the CLI parses the same URL itself: origin =
-  remote-url, last path segment = store id). Member -> onboarding commands;
-  signed-out -> login; non-member/unknown -> `404` (§5). No API behavior
-  attaches to it.
+## 7. 계층 분리 (H010)
 
-### 7. Planes stay separate (Hub SoT [[H010]])
+relay는 `event.id` 기준 중복 제거, 추가 전용 저장, 순서 보존을 담당한다. 계정·멤버십·저장소 종류를 해석하지 않는다. gateway는 계정·키·멤버십·초대를 관리하고 내부 토큰을 넣어 relay에 프록시한다. 두 프로세스는 HTTP로만 통신하며 gateway의 인가는 이벤트 payload에 의존하지 않는다.
 
-The **relay** stores opaque, append-only, order-preserving event logs keyed only
-on `event.id`; it is prefix-blind and never learns accounts, membership, or store
-kinds. The **gateway** owns identity / keys / membership / invites and
-reverse-proxies the relay with an internal token. They are separate processes
-talking only over HTTP. No gateway authorization ever depends on a payload field.
+## 8. 온보딩과 과금 확장 지점
 
-### 8. Onboarding, and the entitlements seam (forward-compat)
+v1은 별도 베타 승인을 요구하지 않는다. OAuth 세션 또는 `/account`에서 발급한 키로 인증한 계정은 워크스페이스를 생성하고 동기화할 수 있다. 과거의 프로젝트별 신청·수동 승인은 종료됐고 `project_acl`은 워크스페이스 멤버십으로 대체됐다(H040).
 
-v1 has **no beta gate**: any account that authenticates (OAuth session, or a key
-it self-minted at `/account`) may create workspaces and sync. The legacy
-per-project access-request + manual-approval flow is **retired** — `project_acl`
-grants are replaced entirely by workspace membership ([[H040]], superseding its
-"access_requests kept" line).
-
-A **billing model (free / team / pro)** is planned but **deliberately deferred**:
-finish the core control-plane first, then layer tiers on top — *a sequencing
-choice, not a scope cut*. Billing is, structurally, **permission separation +
-quotas** — an *entitlements* concern — so it plugs into the **same
-`authorize(principal, resource, action)` gate** (§2), never scattered across
-handlers:
-
-- the principal already carries `accountId`; a future `plan = planOf(accountId)`
-  lookup is purely additive;
-- tier limits (max workspaces per account, max members per workspace, read-only
-  seats, retention window) become **quota checks inside `authorize`**, returning
-  `403`/`409` with a machine-readable reason;
-- no endpoint shape changes — entitlements narrow existing actions, exactly as
-  `read_only` / scope already do (§3).
-
-Keeping every "can this account do this, and how much" decision in one policy
-layer is what lets billing land as an additive layer, not a rewrite. Until then,
-`plan` is implicitly unlimited for every account.
+free/team/pro 과금은 당시 설계에서 연기됐으며, 개발 종료 이후 구현 약속은 없다. 설계상 과금은 기존 `authorize()` 안에 권한·할당량을 추가하는 방식이다. `accountId`로 요금제를 조회하고 계정별 워크스페이스·멤버 수·보존 기간 등의 제한을 같은 정책 경계에서 검사해 `403`·`409`와 기계 판독 가능한 이유를 반환하도록 계획했다. 엔드포인트 형태는 유지하고 기존 허용 범위만 좁힌다. 구현된 과금 제한이 없는 범위에서의 ‘무제한’은 운영 자원이나 서비스 제공 보장이 아니다.

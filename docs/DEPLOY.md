@@ -1,3 +1,5 @@
+> 보존 문서: 아래는 개발 당시 배포 절차다. 자동 배포는 종료했으며 기존 서비스의 운영을 약속하지 않는다. [최종 상태](./final-status.md)를 먼저 확인한다.
+
 # Deploying memorize Hub
 
 The Hub is **one machine** running two processes:

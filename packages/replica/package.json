@@ -2,7 +2,7 @@
   "name": "@shakystar/memorize-hub-replica",
   "version": "0.1.0",
   "private": true,
-  "license": "SEE LICENSE IN LICENSE.md",
+  "license": "MIT",
   "author": "shakystar",
   "description": "memorize Hub read/write surface (H060) - a thin headless host around the published memorize engine. S1: on-demand authoring (form A) - author one domain event with the calling USER's account as provenance writer, push it over the public events route, exit. No domain logic lives here.",
   "type": "module",

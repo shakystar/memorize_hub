@@ -1,5 +1,7 @@
 # memorize_hub - Agent Guide
 
+> 2026-09-24 종료 정리: 이 문서는 개발 당시 설계·작업 규칙을 보존한다. 현재 구현은 relay·gateway·replica·web의 네 활성 패키지와 참고용 gateway-legacy로 구성된다. 과거의 진행·운영 상태 대신 [최종 상태](./docs/final-status.md)를 확인한다. 신규 개발·유지보수는 종료했다.
+
 ## What this is
 
 `memorize_hub` is the **optional relay server** for [memorize](../memorize)'s
